@@ -14,6 +14,7 @@ createServer((req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/javascript",
     "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": "*",
     "Content-Length": statSync(path).size,
   });
   createReadStream(path).pipe(res);

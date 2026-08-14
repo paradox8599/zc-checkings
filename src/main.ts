@@ -1,4 +1,5 @@
-import { extractFromCalendar, resolveMonth, MONTH_INPUT_SEL, type AttendanceRecord } from "./dom";
+import { type AttendanceRecord } from "./dom";
+import { fetchMonthAttendances } from "./api";
 import { summarizeByMonth, type WorkConfig } from "./calc";
 import { createPanel } from "./panel";
 
@@ -48,7 +49,7 @@ function loadRecords(): Map<string, AttendanceRecord> {
 let work: WorkConfig = loadWork();
 const records = loadRecords();
 const captureLog: Array<{ url: string; count: number; time: string; source: string }> = [];
-let lastDomScan = 0;
+let apiFetching = false;
 
 const panel = createPanel(work, {
   onSaveWork(next: WorkConfig) {
@@ -71,6 +72,12 @@ const panel = createPanel(work, {
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
+  },
+  onApiFetchMonth(month: string) {
+    fetchMonth(month);
+  },
+  onApiBackfill(fromMonth: string) {
+    backfillMonths(fromMonth);
   },
   onExport(all: AttendanceRecord[]) {
     if (all.length === 0) return;
@@ -103,11 +110,10 @@ function persist(): void {
 
 function recompute(): void {
   const { total, months } = summarizeByMonth([...records.values()], work);
-  lastRenderedMonth = resolveMonth();
-  panel.update(total, months, [...records.values()], captureLog, lastRenderedMonth);
+  panel.update(total, months, [...records.values()], captureLog);
 }
 
-function mergeRecords(parsed: AttendanceRecord[], source: string, desc: string): boolean {
+function mergeRecords(parsed: AttendanceRecord[]): boolean {
   if (parsed.length === 0) return false;
   const month = parsed[0].date.slice(0, 7);
   const hasAnyClock = parsed.some((r) => r.clockIn || r.clockOut);
@@ -136,57 +142,50 @@ function mergeRecords(parsed: AttendanceRecord[], source: string, desc: string):
     }
   }
   if (changed) {
-    captureLog.push({ url: desc, count: parsed.length, time: new Date().toLocaleTimeString(), source });
-    if (captureLog.length > 50) captureLog.shift();
     persist();
-    recompute();
   }
   return changed;
 }
 
-let stableKey = "";
-let lastRenderedMonth: string | null = null;
-
-function scanDom(): void {
-  const now = Date.now();
-  if (now - lastDomScan < 500) return;
-  lastDomScan = now;
-  const parsed = extractFromCalendar();
-  const key = JSON.stringify(parsed);
-  if (key !== stableKey) {
-    stableKey = key;
-    return;
+async function fetchMonth(yearMonth: string): Promise<boolean> {
+  if (apiFetching) return false;
+  apiFetching = true;
+  try {
+    const parsed = await fetchMonthAttendances(yearMonth);
+    const hasClock = parsed.some((r) => r.clockIn || r.clockOut);
+    captureLog.push({ url: `api:${yearMonth}`, count: parsed.length, time: new Date().toLocaleTimeString(), source: "api" });
+    if (captureLog.length > 50) captureLog.shift();
+    mergeRecords(parsed);
+    recompute();
+    return hasClock;
+  } catch (e) {
+    console.error("[EMERGEN] API 查询失败: " + (e as Error).message);
+    captureLog.push({ url: `api:${yearMonth} 失败`, count: 0, time: new Date().toLocaleTimeString(), source: "api" });
+    recompute();
+    return false;
+  } finally {
+    apiFetching = false;
   }
-  mergeRecords(parsed, "dom", "DOM读取");
 }
 
-function watchMonthInput(): void {
-  const inp = document.querySelector<HTMLInputElement>(MONTH_INPUT_SEL);
-  if (!inp || (inp as HTMLInputElement & { __zcWatched?: boolean }).__zcWatched) return;
-  (inp as HTMLInputElement & { __zcWatched?: boolean }).__zcWatched = true;
-  let timer = 0;
-  new MutationObserver(() => {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      const m = resolveMonth();
-      if (m) {
-        lastRenderedMonth = m;
-        recompute();
-      }
-    }, 250);
-  }).observe(inp, { attributes: true, attributeFilter: ["value"] });
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-scanDom();
-watchMonthInput();
-const mo = new MutationObserver(() => {
-  setTimeout(scanDom, 100);
-  watchMonthInput();
-});
-mo.observe(document.documentElement, { childList: true, subtree: true });
-setInterval(() => {
-  if (Date.now() - lastDomScan > 2000) scanDom();
-  watchMonthInput();
-}, 1000);
+function randDelay(minMs: number, maxMs: number): number {
+  return Math.floor(minMs + Math.random() * (maxMs - minMs));
+}
+
+async function backfillMonths(fromMonth: string): Promise<void> {
+  let ym = fromMonth;
+  for (;;) {
+    if (!(await fetchMonth(ym))) break;
+    ym = prevMonth(ym);
+    if (ym < "2000-01") break;
+    await new Promise((r) => setTimeout(r, randDelay(800, 2000)));
+  }
+}
 
 recompute();

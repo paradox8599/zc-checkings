@@ -4,6 +4,8 @@ import { fmtDuration, minutesToHhmm } from "./calc";
 
 export interface PanelActions {
   onSaveWork(work: WorkConfig): { ok: boolean; error?: string };
+  onApiFetchMonth(month: string): void;
+  onApiBackfill(fromMonth: string): void;
   onExport(records: AttendanceRecord[]): void;
   onClear(): void;
 }
@@ -14,7 +16,6 @@ export interface Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     captureLog: Array<{ url: string; count: number; time: string; source: string }>,
-    pageMonth: string | null,
   ): void;
 }
 
@@ -78,6 +79,57 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   contentWrap.className = "zc-content";
   root.appendChild(contentWrap);
 
+  const now = new Date();
+  const curYear = now.getFullYear();
+  let apiYear = curYear;
+  let apiMonthNum = now.getMonth() + 1;
+  const apiMonthStr = () => `${apiYear}-${String(apiMonthNum).padStart(2, "0")}`;
+  const monthRow = document.createElement("div");
+  monthRow.style.cssText = "display:flex;align-items:center;gap:4px;justify-content:space-between;margin:0 0 8px";
+  const monthNav = document.createElement("div");
+  monthNav.style.cssText = "display:flex;align-items:center;gap:8px";
+
+  const yearSel = document.createElement("select");
+  yearSel.style.cssText = "font-size:12px;padding:1px 2px";
+  for (let y = curYear; y >= 2015; y--) {
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = `${y} 年`;
+    yearSel.appendChild(opt);
+  }
+  yearSel.value = String(apiYear);
+
+  const monthSel = document.createElement("select");
+  monthSel.style.cssText = "font-size:12px;padding:1px 2px";
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement("option");
+    opt.value = String(m);
+    opt.textContent = `${m} 月`;
+    monthSel.appendChild(opt);
+  }
+  monthSel.value = String(apiMonthNum);
+
+  yearSel.onchange = () => {
+    apiYear = Number(yearSel.value);
+  };
+  monthSel.onchange = () => {
+    apiMonthNum = Number(monthSel.value);
+  };
+
+  monthNav.append(yearSel, monthSel);
+  const fetchBtn = document.createElement("button");
+  fetchBtn.type = "button";
+  fetchBtn.textContent = "获取";
+  fetchBtn.className = "btn";
+  fetchBtn.onclick = () => actions.onApiFetchMonth(apiMonthStr());
+  const backfillBtn = document.createElement("button");
+  backfillBtn.type = "button";
+  backfillBtn.textContent = "回溯";
+  backfillBtn.className = "btn";
+  backfillBtn.onclick = () => actions.onApiBackfill(apiMonthStr());
+  monthRow.append(monthNav, fetchBtn, backfillBtn);
+  contentWrap.appendChild(monthRow);
+
   const miniBtn = document.createElement("button");
   miniBtn.textContent = "加班统计";
   miniBtn.style.cssText = [
@@ -101,19 +153,6 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   };
   collapseBtn.onclick = collapseBody;
   miniBtn.onclick = collapseBody;
-
-  let wasCalendar = false;
-  const autoToggle = () => {
-    const isCal = !!document.querySelector(".ant-fullcalendar");
-    if (isCal !== wasCalendar) {
-      wasCalendar = isCal;
-      setCollapsed(!isCal);
-    }
-  };
-  new MutationObserver(autoToggle).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
 
   const summaryEl = document.createElement("div");
   summaryEl.className = "stat";
@@ -139,6 +178,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   const startIn = document.createElement("input");
   startIn.type = "time";
   startIn.value = work.standardStart;
+
   const endIn = document.createElement("input");
   endIn.type = "time";
   endIn.value = work.standardEnd;
@@ -226,7 +266,6 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   };
   contentWrap.appendChild(logToggle);
 
-  let collapsedByDefault = false;
   function ensureAttached() {
     if (attached) return;
     const attach = () => {
@@ -234,11 +273,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       document.body.appendChild(root);
       document.body.appendChild(miniBtn);
       attached = true;
-      if (!collapsedByDefault) {
-        collapsedByDefault = true;
-        wasCalendar = !!document.querySelector(".ant-fullcalendar");
-        setCollapsed(!wasCalendar);
-      }
+      setCollapsed(true);
     };
     if (!document.body) {
       window.addEventListener("DOMContentLoaded", attach);
@@ -303,15 +338,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     captureLog: Array<{ url: string; count: number; time: string; source: string }>,
-    pageMonth: string | null,
   ): void {
     currentRecords = records;
     ensureAttached();
     if (!attached) return;
-
-    autoToggle();
-
-    if (pageMonth) selectedKey = pageMonth;
 
     logEl.innerHTML = "";
     if (captureLog.length === 0) {
