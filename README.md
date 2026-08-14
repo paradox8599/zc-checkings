@@ -23,6 +23,11 @@ Tampermonkey 用户脚本：从公司考勤日历页面读取打卡记录（手�
 
 配置保存在 localStorage（key `zc-attendance-work`）。「清空数据」按钮清空全部打卡记录。
 
+## 构建
+
+- `npm run build`：开发版，输出 `dist/core.js` + `dist/attendance.user.js`（stub），用于本地调试
+- `npm run release`：发布版，输出 `dist/attendance.release.user.js`（27KB 自包含，core 内联、无本地服务依赖），**可直接拖入 Tampermonkey 安装**
+
 ## 本地调试工作流
 
 改动 `src/*.ts` 后只需 `node build.mjs`，再刷新页面即生效——无需在 Tampermonkey 里点更新。

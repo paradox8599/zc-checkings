@@ -1,5 +1,8 @@
 import { build } from "esbuild";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+
+const isRelease = process.argv.includes("--release");
+const version = "0.6.0";
 
 await build({
   entryPoints: ["src/main.ts"],
@@ -18,15 +21,26 @@ await build({
   },
 });
 
-const stub = `// ==UserScript==
-// @name         EMERGEN 考勤加班统计
+const meta = `// @name         考勤加班统计
 // @namespace    zc-checkings
-// @version      0.6.0
-// @description  读取考勤日历 DOM，手动翻页累积并持久化打卡数据，统计加班时长（本地调试版）
+// @version      ${version}
+// @description  读取考勤API查询打卡数据，统计加班时长
 // @match        http://61.174.171.59:9895/*
-// @match        http://localhost:8878/*
-// @match        http://127.0.0.1:8878/*
 // @run-at       document-idle
+`;
+
+if (isRelease) {
+  const core = readFileSync("dist/core.js", "utf8");
+  const release = `// ==UserScript==
+${meta}// ==/UserScript==
+
+${core}`;
+  writeFileSync("dist/attendance.release.user.js", release);
+  console.log(`built dist/attendance.release.user.js (${(release.length / 1024) | 0}KB, 可直接安装到 Tampermonkey)`);
+} else {
+  const stub = `// ==UserScript==
+${meta}// @match        http://localhost:8878/*
+// @match        http://127.0.0.1:8878/*
 // ==/UserScript==
 
 (function () {
@@ -36,14 +50,14 @@ const stub = `// ==UserScript==
       try {
         eval(code);
       } catch (e) {
-        console.error("[EMERGEN] core 执行失败: " + e.message);
+        console.error("[考勤] core 执行失败: " + e.message);
       }
     })
     .catch(function (e) {
-      console.error("[EMERGEN] core 请求失败: " + e);
+      console.error("[考勤] core 请求失败: " + e);
     });
 })();
 `;
-
-writeFileSync("dist/attendance.user.js", stub);
-console.log("built dist/core.js + dist/attendance.user.js (stub)");
+  writeFileSync("dist/attendance.user.js", stub);
+  console.log("built dist/core.js + dist/attendance.user.js (stub)");
+}

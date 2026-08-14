@@ -159,7 +159,7 @@ async function fetchMonth(yearMonth: string): Promise<boolean> {
     recompute();
     return hasClock;
   } catch (e) {
-    console.error("[EMERGEN] API 查询失败: " + (e as Error).message);
+    console.error("[考勤] API 查询失败: " + (e as Error).message);
     captureLog.push({ url: `api:${yearMonth} 失败`, count: 0, time: new Date().toLocaleTimeString(), source: "api" });
     recompute();
     return false;
