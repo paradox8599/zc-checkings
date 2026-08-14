@@ -2,7 +2,8 @@ import { build } from "esbuild";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const isRelease = process.argv.includes("--release");
-const version = "0.6.0";
+const repoUrl = "https://github.com/paradox8599/zc-checkings";
+const version = (process.env.RELEASE_VERSION || "0.0.0-dev").replace(/^v/, "");
 
 await build({
   entryPoints: ["src/main.ts"],
@@ -26,6 +27,8 @@ const meta = `// @name         考勤加班统计
 // @version      ${version}
 // @description  读取考勤API查询打卡数据，统计加班时长
 // @match        http://61.174.171.59:9895/*
+// @updateURL    ${repoUrl}/releases/latest/download/attendance.release.user.js
+// @downloadURL  ${repoUrl}/releases/latest/download/attendance.release.user.js
 // @run-at       document-idle
 `;
 
