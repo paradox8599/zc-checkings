@@ -26,54 +26,65 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     "width:560px", "max-height:90vh", "overflow:auto",
     "background:#fff", "color:#222", "border:1px solid #ccc", "border-radius:8px",
     "box-shadow:0 4px 16px rgba(0,0,0,.25)", "font:12px/1.5 -apple-system,sans-serif",
-    "padding:10px", "box-sizing:border-box", "display:none",
+    "padding:0", "box-sizing:border-box", "display:none",
   ].join(";");
 
   const style = document.createElement("style");
   style.textContent = [
-    `#zc-attendance-panel h3{margin:0;font-size:13px}`,
+    `#zc-attendance-panel{border-color:#d5d9e0;box-shadow:0 6px 24px rgba(30,50,90,.18);padding:0}`,
+    `#zc-attendance-panel .zc-header{background:linear-gradient(135deg,#3a5a9c,#5b7fd4);color:#fff;padding:8px 12px;border-radius:8px 8px 0 0;margin:0}`,
+    `#zc-attendance-panel .zc-header h3{margin:0;font-size:13px;color:#fff}`,
+    `#zc-attendance-panel .zc-header button{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:4px;font-size:11px;padding:1px 8px;cursor:pointer}`,
+    `#zc-attendance-panel .zc-header button:hover{background:rgba(255,255,255,.28)}`,
+    `#zc-attendance-panel .zc-content{padding:10px}`,
     `#zc-attendance-panel table{border-collapse:collapse;width:100%;font-size:11px}`,
-    `#zc-attendance-panel th,#zc-attendance-panel td{border:1px solid #e0e0e0;padding:2px 4px;text-align:right}`,
+    `#zc-attendance-panel th{background:#eef1f7;color:#3a5a9c;font-weight:600;border:1px solid #dfe3ec;padding:3px 4px;text-align:right;position:sticky;top:0}`,
+    `#zc-attendance-panel td{border:1px solid #e8ebf1;padding:2px 4px;text-align:right}`,
     `#zc-attendance-panel th:first-child,#zc-attendance-panel td:first-child{text-align:left}`,
-    `#zc-attendance-panel .ov{background:#fff3cd}`,
-    `#zc-attendance-panel .incomplete{color:#999}`,
-    `#zc-attendance-panel tr.weekend td{background:#f3e8ff;color:#5b21b6}`,
+    `#zc-attendance-panel tbody tr:nth-child(even){background:#f8f9fc}`,
+    `#zc-attendance-panel .ov td{background:#fff8e6}`,
+    `#zc-attendance-panel .incomplete td{color:#a5adb8}`,
+    `#zc-attendance-panel tr.weekend td{background:#f2eafa;color:#6d4fc1}`,
     `#zc-attendance-panel tr.weekend td:first-child{font-weight:600}`,
     `#zc-attendance-panel tr.today td{border-top:2px solid #4a90d9;border-bottom:2px solid #4a90d9;padding-top:3px;padding-bottom:3px}`,
     `#zc-attendance-panel tr.today td:first-child{border-left:2px solid #4a90d9}`,
     `#zc-attendance-panel tr.today td:last-child{border-right:2px solid #4a90d9}`,
     `#zc-attendance-panel tr.today td:first-child{font-weight:600}`,
-    `#zc-attendance-panel .btn{margin:4px 4px 0 0;font-size:11px;padding:2px 8px;cursor:pointer}`,
-    `#zc-attendance-panel .stat{display:flex;flex-wrap:wrap;gap:4px 24px;margin-bottom:8px}`,
-    `#zc-attendance-panel .stat b{color:#333}`,
-    `#zc-attendance-panel .month-side{flex:0 0 96px;display:flex;flex-direction:column;gap:2px;border-right:1px solid #e0e0e0;padding-right:6px}`,
-    `#zc-attendance-panel .month-btn{display:block;width:100%;text-align:left;padding:3px 6px;font-size:11px;cursor:pointer;border:none;background:none;border-radius:4px}`,
-    `#zc-attendance-panel .month-btn:hover{background:#f0f0f0}`,
-    `#zc-attendance-panel .month-btn.active{background:#e0e0e0;font-weight:600}`,
-    `#zc-attendance-panel.collapsed>*:not(:first-child){display:none}`,
+    `#zc-attendance-panel .btn{margin:4px 4px 0 0;font-size:11px;padding:3px 10px;cursor:pointer;border:1px solid #c3cbdc;border-radius:4px;background:#fff;color:#3a5a9c}`,
+    `#zc-attendance-panel .btn:hover{background:#eef1f7}`,
+    `#zc-attendance-panel .stat{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}`,
+    `#zc-attendance-panel .stat-line{display:flex;flex-wrap:wrap;gap:6px}`,
+    `#zc-attendance-panel .stat-line .chip{background:#f2f5fb;border:1px solid #e2e7f1;border-radius:6px;padding:2px 8px;font-size:11px;color:#5a6478}`,
+    `#zc-attendance-panel .stat-line .chip b{color:#3a5a9c}`,
+    `#zc-attendance-panel .stat-label{font-size:11px;color:#7a8499;margin-bottom:2px}`,
+    `#zc-attendance-panel .month-side{flex:0 0 96px;display:flex;flex-direction:column;gap:2px;border-right:1px solid #e8ebf1;padding-right:6px}`,
+    `#zc-attendance-panel .month-btn{display:block;width:100%;text-align:left;padding:3px 6px;font-size:11px;cursor:pointer;border:none;background:none;border-radius:4px;color:#4a5468}`,
+    `#zc-attendance-panel .month-btn:hover{background:#eef1f7}`,
+    `#zc-attendance-panel .month-btn.active{background:#3a5a9c;color:#fff;font-weight:600}`,
   ].join("\n");
   root.appendChild(style);
 
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:8px";
+  header.className = "zc-header";
+  header.style.cssText = "display:flex;justify-content:space-between;align-items:center";
   const title = document.createElement("h3");
-  title.style.cssText = "margin:0";
   title.textContent = "EMERGEN 考勤加班统计";
   header.appendChild(title);
   const collapseBtn = document.createElement("button");
   collapseBtn.textContent = "收起";
-  collapseBtn.className = "btn";
-  collapseBtn.style.cssText = "margin:0;font-size:11px;padding:1px 8px;cursor:pointer";
   header.appendChild(collapseBtn);
   root.appendChild(header);
+  const contentWrap = document.createElement("div");
+  contentWrap.className = "zc-content";
+  root.appendChild(contentWrap);
 
   const miniBtn = document.createElement("button");
   miniBtn.textContent = "加班统计";
   miniBtn.style.cssText = [
     "position:fixed", "top:16px", "right:16px", "z-index:2147483647",
-    "font-size:11px", "padding:3px 8px", "cursor:pointer",
-    "border:1px solid #ccc", "border-radius:6px", "background:#fff",
-    "box-shadow:0 2px 8px rgba(0,0,0,.2)", "display:none",
+    "font-size:11px", "padding:3px 10px", "cursor:pointer",
+    "border:none", "border-radius:6px", "background:linear-gradient(135deg,#3a5a9c,#5b7fd4)",
+    "color:#fff", "box-shadow:0 2px 8px rgba(58,90,156,.35)", "display:none",
   ].join(";");
 
   const setCollapsed = (collapsed: boolean) => {
@@ -106,10 +117,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   const summaryEl = document.createElement("div");
   summaryEl.className = "stat";
-  root.appendChild(summaryEl);
+  contentWrap.appendChild(summaryEl);
 
   const body = document.createElement("div");
-  root.appendChild(body);
+  contentWrap.appendChild(body);
 
   const configBox = document.createElement("div");
 
@@ -197,23 +208,23 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   toggleBtn.onclick = () => {
     configBox.style.display = configBox.style.display === "none" ? "" : "none";
   };
-  root.appendChild(toggleBtn);
+  contentWrap.appendChild(toggleBtn);
   configBox.style.display = "none";
-  root.appendChild(configBox);
+  contentWrap.appendChild(configBox);
 
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
   let attached = false;
   const logEl = document.createElement("div");
   logEl.style.cssText = "font:10px/1.4 monospace;color:#666;margin-top:6px;max-height:120px;overflow:auto;display:none";
-  root.appendChild(logEl);
+  contentWrap.appendChild(logEl);
   const logToggle = document.createElement("button");
   logToggle.textContent = "捕获日志";
   logToggle.className = "btn";
   logToggle.onclick = () => {
     logEl.style.display = logEl.style.display === "none" ? "" : "none";
   };
-  root.appendChild(logToggle);
+  contentWrap.appendChild(logToggle);
 
   let collapsedByDefault = false;
   function ensureAttached() {
@@ -277,11 +288,12 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       ["总工时", fmtDuration(s.totalWorkedMinutes)],
     ];
     const line = document.createElement("div");
-    line.style.cssText = "display:flex;flex-wrap:wrap;gap:0 20px";
+    line.className = "stat-line";
     for (const [k, v] of items) {
-      const span = document.createElement("span");
-      span.innerHTML = `${k}: <b>${v}</b>`;
-      line.appendChild(span);
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${k} <b>${v}</b>`;
+      line.appendChild(chip);
     }
     return line;
   }
@@ -316,7 +328,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     const summaryBox = document.createElement("div");
     summaryBox.className = "stat";
     const totalLabel = document.createElement("div");
-    totalLabel.innerHTML = `全部: `;
+    const totalTag = document.createElement("div");
+    totalTag.className = "stat-label";
+    totalTag.textContent = "全部";
+    totalLabel.appendChild(totalTag);
     totalLabel.appendChild(renderStats(summary));
     summaryBox.appendChild(totalLabel);
     summaryEl.appendChild(summaryBox);
@@ -341,13 +356,13 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       content.innerHTML = "";
       monthStatEl.innerHTML = "";
       if (!g) return;
-      const label = document.createElement("span");
-      label.textContent = `${g.label}: `;
-      label.style.cssText = "font-weight:600";
+      const label = document.createElement("div");
+      label.className = "stat-label";
+      label.textContent = g.label;
       monthStatEl.appendChild(label);
       monthStatEl.appendChild(renderStats(g.summary));
       const head = document.createElement("div");
-      head.style.cssText = "font-weight:600;margin-bottom:4px";
+      head.style.cssText = "font-weight:600;margin-bottom:4px;color:#3a5a9c";
       head.textContent =
         `${g.label}  出勤${g.summary.workedDays}天  加班${fmtDuration(g.summary.totalOvertimeMinutes)}`;
       content.appendChild(head);
