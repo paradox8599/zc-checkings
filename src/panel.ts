@@ -26,7 +26,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     "width:560px", "max-height:90vh", "overflow:auto",
     "background:#fff", "color:#222", "border:1px solid #ccc", "border-radius:8px",
     "box-shadow:0 4px 16px rgba(0,0,0,.25)", "font:12px/1.5 -apple-system,sans-serif",
-    "padding:10px", "box-sizing:border-box",
+    "padding:10px", "box-sizing:border-box", "display:none",
   ].join(";");
 
   const style = document.createElement("style");
@@ -39,6 +39,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .incomplete{color:#999}`,
     `#zc-attendance-panel tr.weekend td{background:#f3e8ff;color:#5b21b6}`,
     `#zc-attendance-panel tr.weekend td:first-child{font-weight:600}`,
+    `#zc-attendance-panel tr.today td{border-top:2px solid #4a90d9;border-bottom:2px solid #4a90d9;padding-top:3px;padding-bottom:3px}`,
+    `#zc-attendance-panel tr.today td:first-child{border-left:2px solid #4a90d9}`,
+    `#zc-attendance-panel tr.today td:last-child{border-right:2px solid #4a90d9}`,
+    `#zc-attendance-panel tr.today td:first-child{font-weight:600}`,
     `#zc-attendance-panel .btn{margin:4px 4px 0 0;font-size:11px;padding:2px 8px;cursor:pointer}`,
     `#zc-attendance-panel .stat{display:flex;flex-wrap:wrap;gap:4px 24px;margin-bottom:8px}`,
     `#zc-attendance-panel .stat b{color:#333}`,
@@ -63,17 +67,42 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   header.appendChild(collapseBtn);
   root.appendChild(header);
 
-  const collapseBody = () => {
-    const collapsed = root.classList.contains("collapsed");
+  const miniBtn = document.createElement("button");
+  miniBtn.textContent = "加班统计";
+  miniBtn.style.cssText = [
+    "position:fixed", "top:16px", "right:16px", "z-index:2147483647",
+    "font-size:11px", "padding:3px 8px", "cursor:pointer",
+    "border:1px solid #ccc", "border-radius:6px", "background:#fff",
+    "box-shadow:0 2px 8px rgba(0,0,0,.2)", "display:none",
+  ].join(";");
+
+  const setCollapsed = (collapsed: boolean) => {
     if (collapsed) {
-      root.classList.remove("collapsed");
-      collapseBtn.textContent = "收起";
+      root.style.display = "none";
+      miniBtn.style.display = "";
     } else {
-      root.classList.add("collapsed");
-      collapseBtn.textContent = "展开";
+      root.style.display = "";
+      miniBtn.style.display = "none";
     }
   };
+  const collapseBody = () => {
+    setCollapsed(root.style.display !== "none");
+  };
   collapseBtn.onclick = collapseBody;
+  miniBtn.onclick = collapseBody;
+
+  let wasCalendar = false;
+  const autoToggle = () => {
+    const isCal = !!document.querySelector(".ant-fullcalendar");
+    if (isCal !== wasCalendar) {
+      wasCalendar = isCal;
+      setCollapsed(!isCal);
+    }
+  };
+  new MutationObserver(autoToggle).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
 
   const summaryEl = document.createElement("div");
   summaryEl.className = "stat";
@@ -186,24 +215,32 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   };
   root.appendChild(logToggle);
 
+  let collapsedByDefault = false;
   function ensureAttached() {
     if (attached) return;
+    const attach = () => {
+      if (attached) return;
+      document.body.appendChild(root);
+      document.body.appendChild(miniBtn);
+      attached = true;
+      if (!collapsedByDefault) {
+        collapsedByDefault = true;
+        wasCalendar = !!document.querySelector(".ant-fullcalendar");
+        setCollapsed(!wasCalendar);
+      }
+    };
     if (!document.body) {
-      window.addEventListener("DOMContentLoaded", () => {
-        if (!attached) {
-          document.body.appendChild(root);
-          attached = true;
-        }
-      });
+      window.addEventListener("DOMContentLoaded", attach);
       return;
     }
-    document.body.appendChild(root);
-    attached = true;
+    attach();
   }
 
   const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
   function renderMonthTable(days: Summary["days"]): HTMLTableElement {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     const table = document.createElement("table");
     table.innerHTML =
       "<tr><th>日期</th><th>星期</th><th>上班</th><th>下班</th><th>工时</th><th>加班</th></tr>";
@@ -214,6 +251,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       if (isWeekend) tr.className = "weekend";
       else if (d.incomplete) tr.className = "incomplete";
       else if (d.overtimeMinutes > 0) tr.className = "ov";
+      if (d.date === todayStr) tr.classList.add("today");
       const td = (txt: string) => {
         const c = document.createElement("td");
         c.textContent = txt;
@@ -258,6 +296,8 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     currentRecords = records;
     ensureAttached();
     if (!attached) return;
+
+    autoToggle();
 
     if (pageMonth) selectedKey = pageMonth;
 

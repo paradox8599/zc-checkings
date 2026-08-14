@@ -45,12 +45,6 @@ export function resolveMonth(): string | null {
       if (mo >= 1 && mo <= 12) return `${m[1]}-${String(mo).padStart(2, "0")}`;
     }
   }
-  const m = document.body.innerText.match(/(\d{4})年(\d{1,2})月/);
-  if (m) {
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    if (mo >= 1 && mo <= 12) return `${y}-${String(mo).padStart(2, "0")}`;
-  }
   return null;
 }
 
