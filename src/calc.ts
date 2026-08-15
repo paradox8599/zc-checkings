@@ -15,20 +15,12 @@ export function timeToMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
-export function minutesToHhmm(min: number): string {
-  const sign = min < 0 ? "-" : "";
-  const abs = Math.abs(min);
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
 export function fmtDuration(min: number): string {
   const sign = min < 0 ? "-" : "";
   const abs = Math.abs(min);
   const h = Math.floor(abs / 60);
   const m = abs % 60;
-  return `${sign}${h}h ${m}m`;
+  return `${sign}${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
 }
 
 export interface DayStat {

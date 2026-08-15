@@ -1,6 +1,6 @@
 import type { WorkConfig, Summary, MonthGroup } from "./calc";
 import type { AttendanceRecord } from "./api";
-import { fmtDuration, minutesToHhmm } from "./calc";
+import { fmtDuration } from "./calc";
 
 export interface PanelActions {
   onSaveWork(work: WorkConfig): { ok: boolean; error?: string };
@@ -24,7 +24,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   root.id = "zc-attendance-panel";
   root.style.cssText = [
     "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
-    "width:560px", "max-height:90vh", "overflow:auto",
+    "width:720px", "max-height:90vh", "overflow:auto",
     "background:#fff", "color:#222", "border:1px solid #ccc", "border-radius:8px",
     "box-shadow:0 4px 16px rgba(0,0,0,.25)", "font:12px/1.5 -apple-system,sans-serif",
     "padding:0", "box-sizing:border-box", "display:none",
@@ -60,7 +60,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .stat{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}`,
     `#zc-attendance-panel .stat-line{display:flex;flex-wrap:wrap;gap:6px}`,
     `#zc-attendance-panel .stat-line .chip{background:#f2f5fb;border:1px solid #e2e7f1;border-radius:6px;padding:2px 8px;font-size:11px;color:#5a6478}`,
-    `#zc-attendance-panel .stat-line .chip b{color:#3a5a9c}`,
+    `#zc-attendance-panel .stat-line .chip b{color:#3a5a9c;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
     `#zc-attendance-panel .stat-label{font-size:11px;color:#7a8499;margin-bottom:2px}`,
     `#zc-attendance-panel .month-side{flex:0 0 96px;display:flex;flex-direction:column;gap:2px;border-right:1px solid #e8ebf1;padding-right:6px}`,
     `#zc-attendance-panel .month-btn{display:block;width:100%;text-align:left;padding:3px 6px;font-size:11px;cursor:pointer;border:none;background:none;border-radius:4px;color:#4a5468}`,
@@ -71,20 +71,20 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .tb-head .tb-label{flex:0 0 62px}`,
     `#zc-attendance-panel .tb-head .tb-clockin{flex:0 0 34px}`,
     `#zc-attendance-panel .tb-head .tb-clockout{flex:0 0 34px}`,
-    `#zc-attendance-panel .tb-head .tb-meta{flex:0 0 80px}`,
+    `#zc-attendance-panel .tb-head .tb-meta{flex:0 0 100px}`,
     `#zc-attendance-panel .tb-scale{flex:1;position:relative;height:12px}`,
-    `#zc-attendance-panel .tb-scale span{position:absolute;top:0;transform:translateX(-50%);font-size:9px;line-height:12px;color:#9aa3b2;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-scale span{position:absolute;top:0;transform:translateX(-50%);font-size:9px;line-height:12px;color:#9aa3b2;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
     `#zc-attendance-panel .tb-row{display:flex;align-items:center;height:22px;border-top:1px solid #eef1f6}`,
-    `#zc-attendance-panel .tb-label{flex:0 0 62px;font-size:10px;color:#5a6478;white-space:nowrap;font-variant-numeric:tabular-nums}`,
-    `#zc-attendance-panel .tb-clockin{flex:0 0 34px;text-align:right;padding-right:4px;font-size:10px;color:#3a4356;font-variant-numeric:tabular-nums}`,
-    `#zc-attendance-panel .tb-clockout{flex:0 0 34px;text-align:left;padding-left:4px;font-size:10px;color:#3a4356;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-label{flex:0 0 62px;font-size:10px;color:#5a6478;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-clockin{flex:0 0 34px;text-align:right;padding-right:4px;font-size:10px;color:#3a4356;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-clockout{flex:0 0 34px;text-align:left;padding-left:4px;font-size:10px;color:#3a4356;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
     `#zc-attendance-panel .tb-track{flex:1;position:relative;height:14px;background:#f2f4f9;border-radius:3px;overflow:hidden}`,
     `#zc-attendance-panel .tb-tick{position:absolute;top:0;bottom:0;width:1px;background:#d5dae6}`,
     `#zc-attendance-panel .tb-bar{position:absolute;top:1px;bottom:1px;background:#4a90d9;border-radius:2px}`,
     `#zc-attendance-panel .tb-bar-ot{position:absolute;top:1px;bottom:1px;background:#e8890c;border-radius:0 2px 2px 0}`,
-    `#zc-attendance-panel .tb-meta{flex:0 0 80px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-variant-numeric:tabular-nums}`,
-    `#zc-attendance-panel .tb-meta .w{flex:0 0 34px;text-align:right}`,
-    `#zc-attendance-panel .tb-meta .ov{flex:0 0 40px;text-align:right;color:#c07b1c;font-weight:600}`,
+    `#zc-attendance-panel .tb-meta{flex:0 0 100px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-meta .w{flex:0 0 44px;text-align:right}`,
+    `#zc-attendance-panel .tb-meta .ov{flex:0 0 50px;text-align:right;color:#c07b1c;font-weight:600}`,
     `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
     `#zc-attendance-panel .tb-row.weekend .tb-bar{background:#8f74d8}`,
     `#zc-attendance-panel .tb-row.incomplete .tb-label{color:#a5adb8}`,
@@ -469,7 +469,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
           ot.className = "tb-bar-ot";
           ot.style.left = pct(d.otStartMinutes) + "%";
           ot.style.width = pct(outMin) - pct(d.otStartMinutes) + "%";
-          ot.title = `加班 ${minutesToHhmm(d.overtimeMinutes)}h`;
+          ot.title = `加班 ${fmtDuration(d.overtimeMinutes)}`;
           track.appendChild(ot);
         }
       }
@@ -483,11 +483,11 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       } else {
         const w = document.createElement("span");
         w.className = "w";
-        w.textContent = `${minutesToHhmm(d.workedMinutes)}h`;
+        w.textContent = fmtDuration(d.workedMinutes);
         meta.appendChild(w);
         const ov = document.createElement("span");
         ov.className = "ov";
-        if (d.overtimeMinutes > 0) ov.textContent = `+${minutesToHhmm(d.overtimeMinutes)}h`;
+        if (d.overtimeMinutes > 0) ov.textContent = `+${fmtDuration(d.overtimeMinutes)}`;
         meta.appendChild(ov);
       }
       row.append(label, clockIn, track, clockOut, meta);
