@@ -89,16 +89,30 @@ const panel = createPanel(work, {
       recompute();
     });
   },
-  onExport(all: AttendanceRecord[]) {
-    if (all.length === 0) return;
-    const lines = ["date,clockIn,clockOut"];
-    for (const r of all) {
-      lines.push(`${r.date},${r.clockIn ?? ""},${r.clockOut ?? ""}`);
+  onExport(all: AttendanceRecord[], monthKey?: string | null) {
+    const recs = monthKey ? all.filter((r) => r.date.startsWith(monthKey)) : all;
+    if (recs.length === 0) return;
+    const { total, months } = summarizeByMonth(recs, work);
+    const lines = ["日期,上班,下班,工时(小时),加班(小时)"];
+    for (const m of [...months].reverse()) {
+      for (const d of m.summary.days) {
+        lines.push(
+          d.incomplete
+            ? `${d.date},${d.clockIn ?? ""},${d.clockOut ?? ""},,`
+            : `${d.date},${d.clockIn},${d.clockOut},${(d.workedMinutes / 60).toFixed(2)},${(d.overtimeMinutes / 60).toFixed(2)}`,
+        );
+      }
+      lines.push(
+        `${m.label}小计,,,${(m.summary.totalWorkedMinutes / 60).toFixed(2)},${(m.summary.totalOvertimeMinutes / 60).toFixed(2)}`,
+      );
     }
+    lines.push(`总计,,,${(total.totalWorkedMinutes / 60).toFixed(2)},${(total.totalOvertimeMinutes / 60).toFixed(2)}`);
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `attendance-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = monthKey
+      ? `attendance-${monthKey}.csv`
+      : `attendance-all-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   },

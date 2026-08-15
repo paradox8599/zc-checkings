@@ -6,7 +6,7 @@ export interface PanelActions {
   onSaveWork(work: WorkConfig): { ok: boolean; error?: string };
   onApiFetchMonth(month: string): void;
   onApiBackfill(fromMonth: string): void;
-  onExport(records: AttendanceRecord[]): void;
+  onExport(records: AttendanceRecord[], monthKey?: string | null): void;
   onClear(): void;
 }
 
@@ -204,15 +204,11 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       showStatus("已保存 ✓", "ok");
     }
   };
-  const exportBtn = document.createElement("button");
-  exportBtn.textContent = "导出 CSV";
-  exportBtn.className = "btn";
-  exportBtn.onclick = () => actions.onExport(currentRecords);
   const clearBtn = document.createElement("button");
   clearBtn.textContent = "清空数据";
   clearBtn.className = "btn";
   clearBtn.onclick = () => actions.onClear();
-  btnRow.append(saveBtn, exportBtn, clearBtn);
+  btnRow.append(saveBtn, clearBtn);
   configBox.appendChild(btnRow);
 
   const toggleBtn = document.createElement("button");
@@ -298,7 +294,17 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     showStatus(`正在回溯 ${apiMonthStr()} …`);
     actions.onApiBackfill(apiMonthStr());
   };
-  monthRow.append(monthNav, fetchBtn, backfillBtn, statusEl, toggleBtn);
+  const exportAllBtn = document.createElement("button");
+  exportAllBtn.type = "button";
+  exportAllBtn.textContent = "导出全部";
+  exportAllBtn.className = "btn";
+  exportAllBtn.onclick = () => actions.onExport(currentRecords);
+  const exportMonthBtn = document.createElement("button");
+  exportMonthBtn.type = "button";
+  exportMonthBtn.textContent = "导出当月";
+  exportMonthBtn.className = "btn";
+  exportMonthBtn.onclick = () => actions.onExport(currentRecords, selectedKey);
+  monthRow.append(monthNav, fetchBtn, backfillBtn, statusEl, exportAllBtn, exportMonthBtn, toggleBtn);
   contentWrap.appendChild(monthRow);
   contentWrap.appendChild(configBox);
 
