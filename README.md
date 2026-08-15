@@ -2,16 +2,15 @@
 
 Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份累积），对比正常工作时间计算加班。
 
-## 安装 Tampermonkey
+## 安装 Tampermonkey（Beta）
 
-按浏览器安装扩展：
+建议使用 **Tampermonkey Beta**（Stable 版在部分 Chrome 版本上存在安装流程兼容问题，Beta 版更稳定）：
 
-- Chrome / Edge（Chrome 商店）：[安装 Tampermonkey](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
-- Edge（商店版）：[安装 Tampermonkey](https://microsoftedge.microsoft.com/addons/detail/tampermonkey/iikmkjmpaadaobahmlepeloendndfphd)
-- Firefox：[安装 Tampermonkey](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
-- 其他浏览器（Safari、Opera 等）：访问[官网](https://www.tampermonkey.net/)下载
+- Chrome / Edge：打开 [Tampermonkey Beta 页面](https://www.tampermonkey.net/beta.php)，下载对应浏览器的 `tampermonkey_beta_current.crx`，拖入 `chrome://extensions`（需开启「开发者模式」）安装
+- Firefox：[安装 Tampermonkey Beta](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey-beta/)
+- 其他浏览器：访问[官网](https://www.tampermonkey.net/)查看支持情况
 
-安装后确认工具栏出现 Tampermonkey 图标即可。
+安装后确认工具栏出现 Tampermonkey 图标即可。若脚本在页面上不生效，需在 `chrome://extensions` 中开启 Tampermonkey Beta 的「允许用户脚本」（Allow User Scripts）开关。
 
 ## 用法
 
@@ -48,7 +47,7 @@ Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份�
 npm run dev
 ```
 
-自动完成：构建（watch 模式，改动 `src/*.ts` 自动重建）→ 起本地服务（8877）→ 启动独立 Chrome（临时 profile，自动加载 Tampermonkey 并安装 dev 版脚本）→ 打开考勤系统页面。
+自动完成：构建（watch 模式，改动 `src/*.ts` 自动重建）→ 起本地服务（8877）→ 启动独立 Chrome（临时 profile，自动加载 Tampermonkey Beta 并安装 dev 版脚本）→ 打开考勤系统页面。
 
 首次启动会下载 Tampermonkey 并安装脚本（耗时几秒）；之后复用 profile，秒开。后续改动只需刷新考勤系统页面即生效，无需在 Tampermonkey 里点更新。
 
