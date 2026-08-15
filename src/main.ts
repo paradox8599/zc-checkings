@@ -11,6 +11,7 @@ const DEFAULT_WORK: WorkConfig = {
   overtimeBufferMinutes: 30,
   overtimeFrom: "threshold",
   lunchBreakMinutes: 0,
+  weekendLunchBreak: false,
 };
 
 function loadWork(): WorkConfig {
@@ -49,6 +50,8 @@ let work: WorkConfig = loadWork();
 const records = loadRecords();
 const captureLog: Array<{ url: string; count: number; time: string; source: string }> = [];
 let apiFetching = false;
+let backfilling = false;
+let fetchingMonth = "";
 
 const panel = createPanel(work, {
   onSaveWork(next: WorkConfig) {
@@ -60,6 +63,7 @@ const panel = createPanel(work, {
         typeof next.standardEnd !== "string" ||
         !Number.isFinite(next.overtimeBufferMinutes) ||
         !Number.isFinite(next.lunchBreakMinutes) ||
+        typeof next.weekendLunchBreak !== "boolean" ||
         (next.overtimeFrom !== "threshold" && next.overtimeFrom !== "standard" && next.overtimeFrom !== "8hours")
       ) {
         throw new Error("配置格式不合法");
@@ -76,7 +80,22 @@ const panel = createPanel(work, {
     fetchMonth(month);
   },
   onApiBackfill(fromMonth: string) {
-    backfillMonths(fromMonth);
+    backfilling = true;
+    fetchingMonth = fromMonth;
+    recompute();
+    backfillMonths(fromMonth)
+      .then((lastOk) => {
+        captureLog.push({
+          url: lastOk ? `已回溯 ${fromMonth} 至 ${lastOk}` : `回溯失败:${fromMonth}`,
+          count: 0,
+          time: new Date().toLocaleTimeString(),
+          source: "backfill",
+        });
+      })
+      .finally(() => {
+        backfilling = false;
+        recompute();
+      });
   },
   onExport(all: AttendanceRecord[]) {
     if (all.length === 0) return;
@@ -109,7 +128,10 @@ function persist(): void {
 
 function recompute(): void {
   const { total, months } = summarizeByMonth([...records.values()], work);
-  panel.update(total, months, [...records.values()], captureLog);
+  const busy = apiFetching || backfilling
+    ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
+    : null;
+  panel.update(total, months, [...records.values()], captureLog, busy);
 }
 
 function mergeRecords(parsed: AttendanceRecord[]): boolean {
@@ -149,21 +171,21 @@ function mergeRecords(parsed: AttendanceRecord[]): boolean {
 async function fetchMonth(yearMonth: string): Promise<boolean> {
   if (apiFetching) return false;
   apiFetching = true;
+  fetchingMonth = yearMonth;
   try {
     const parsed = await fetchMonthAttendances(yearMonth);
     const hasClock = parsed.some((r) => r.clockIn || r.clockOut);
     captureLog.push({ url: `api:${yearMonth}`, count: parsed.length, time: new Date().toLocaleTimeString(), source: "api" });
     if (captureLog.length > 50) captureLog.shift();
     mergeRecords(parsed);
-    recompute();
     return hasClock;
   } catch (e) {
     console.error("[考勤] API 查询失败: " + (e as Error).message);
     captureLog.push({ url: `api:${yearMonth} 失败`, count: 0, time: new Date().toLocaleTimeString(), source: "api" });
-    recompute();
     return false;
   } finally {
     apiFetching = false;
+    recompute();
   }
 }
 
@@ -177,14 +199,17 @@ function randDelay(minMs: number, maxMs: number): number {
   return Math.floor(minMs + Math.random() * (maxMs - minMs));
 }
 
-async function backfillMonths(fromMonth: string): Promise<void> {
+async function backfillMonths(fromMonth: string): Promise<string> {
   let ym = fromMonth;
+  let lastOk = "";
   for (;;) {
     if (!(await fetchMonth(ym))) break;
+    lastOk = ym;
     ym = prevMonth(ym);
     if (ym < "2000-01") break;
     await new Promise((r) => setTimeout(r, randDelay(800, 2000)));
   }
+  return lastOk || "";
 }
 
 recompute();

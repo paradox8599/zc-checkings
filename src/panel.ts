@@ -16,6 +16,7 @@ export interface Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     captureLog: Array<{ url: string; count: number; time: string; source: string }>,
+    busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
 
@@ -37,6 +38,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .zc-header h3{margin:0;font-size:13px;color:#fff}`,
     `#zc-attendance-panel .zc-header button{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:4px;font-size:11px;padding:1px 8px;cursor:pointer}`,
     `#zc-attendance-panel .zc-header button:hover{background:rgba(255,255,255,.28)}`,
+    `#zc-attendance-panel .zc-status{flex:1;font-size:10px;color:#7a8499;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}`,
+    `#zc-attendance-panel .zc-status.ok{color:#2e9e5b}`,
+    `#zc-attendance-panel .zc-status.err{color:#d9534f}`,
+    `#zc-attendance-panel .btn:disabled{opacity:.5;cursor:default}`,
     `#zc-attendance-panel .zc-content{padding:10px}`,
     `#zc-attendance-panel table{border-collapse:collapse;width:100%;font-size:11px}`,
     `#zc-attendance-panel th{background:#eef1f7;color:#3a5a9c;font-weight:600;border:1px solid #dfe3ec;padding:3px 4px;text-align:right;position:sticky;top:0}`,
@@ -77,6 +82,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .tb-track{flex:1;position:relative;height:14px;background:#f2f4f9;border-radius:3px;overflow:hidden}`,
     `#zc-attendance-panel .tb-tick{position:absolute;top:0;bottom:0;width:1px;background:#d5dae6}`,
     `#zc-attendance-panel .tb-bar{position:absolute;top:1px;bottom:1px;background:#4a90d9;border-radius:2px}`,
+    `#zc-attendance-panel .tb-bar-ot{position:absolute;top:1px;bottom:1px;background:#e8890c;border-radius:0 2px 2px 0}`,
     `#zc-attendance-panel .tb-meta{flex:0 0 80px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-variant-numeric:tabular-nums}`,
     `#zc-attendance-panel .tb-meta .ov{color:#c07b1c;font-weight:600}`,
     `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
@@ -139,17 +145,44 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   };
 
   monthNav.append(yearSel, monthSel);
+  const statusEl = document.createElement("div");
+  statusEl.className = "zc-status";
+  let statusTimer: number | null = null;
+  const showStatus = (msg: string, kind: "busy" | "ok" | "err" = "busy") => {
+    if (statusTimer !== null) window.clearTimeout(statusTimer);
+    statusTimer = null;
+    statusEl.textContent = msg;
+    statusEl.className = "zc-status" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
+    if (kind !== "busy") {
+      statusTimer = window.setTimeout(() => {
+        if (statusEl.textContent === msg) {
+          statusEl.textContent = "";
+          statusEl.className = "zc-status";
+        }
+      }, 3000);
+    }
+  };
   const fetchBtn = document.createElement("button");
   fetchBtn.type = "button";
   fetchBtn.textContent = "获取";
   fetchBtn.className = "btn";
-  fetchBtn.onclick = () => actions.onApiFetchMonth(apiMonthStr());
+  fetchBtn.onclick = () => {
+    fetchBtn.disabled = true;
+    backfillBtn.disabled = true;
+    showStatus(`正在获取 ${apiMonthStr()} …`);
+    actions.onApiFetchMonth(apiMonthStr());
+  };
   const backfillBtn = document.createElement("button");
   backfillBtn.type = "button";
   backfillBtn.textContent = "回溯";
   backfillBtn.className = "btn";
-  backfillBtn.onclick = () => actions.onApiBackfill(apiMonthStr());
-  monthRow.append(monthNav, fetchBtn, backfillBtn);
+  backfillBtn.onclick = () => {
+    fetchBtn.disabled = true;
+    backfillBtn.disabled = true;
+    showStatus(`正在回溯 ${apiMonthStr()} …`);
+    actions.onApiBackfill(apiMonthStr());
+  };
+  monthRow.append(monthNav, statusEl, fetchBtn, backfillBtn);
   contentWrap.appendChild(monthRow);
 
   const miniBtn = document.createElement("button");
@@ -229,12 +262,17 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   fromSel.append(optThreshold, optStandard, opt8Hours);
   fromSel.value = work.overtimeFrom;
 
+  const weekendLunchChk = document.createElement("input");
+  weekendLunchChk.type = "checkbox";
+  weekendLunchChk.checked = work.weekendLunchBreak;
+
   form.append(
     mkRow("上班时间", startIn),
     mkRow("下班时间", endIn),
     mkRow("午休(分钟)", lunchIn),
     mkRow("宽限(分钟)", bufferIn),
     mkRow("加班计算", fromSel),
+    mkRow("周末扣午休", weekendLunchChk),
   );
   configBox.appendChild(form);
 
@@ -249,9 +287,15 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       lunchBreakMinutes: Number(lunchIn.value),
       overtimeBufferMinutes: Number(bufferIn.value),
       overtimeFrom: fromSel.value as WorkConfig["overtimeFrom"],
+      weekendLunchBreak: weekendLunchChk.checked,
     };
     const res = actions.onSaveWork(next);
-    if (!res.ok) alert("保存失败: " + res.error);
+    if (!res.ok) {
+      alert("保存失败: " + res.error);
+      showStatus("保存失败: " + res.error, "err");
+    } else {
+      showStatus("已保存 ✓", "ok");
+    }
   };
   const exportBtn = document.createElement("button");
   exportBtn.textContent = "导出 CSV";
@@ -378,6 +422,14 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
         bar.style.width = pct(outMin) - pct(inMin) + "%";
         bar.title = `${d.clockIn} - ${d.clockOut}`;
         track.appendChild(bar);
+        if (d.otStartMinutes !== null && d.otStartMinutes > inMin && d.otStartMinutes < outMin) {
+          const ot = document.createElement("div");
+          ot.className = "tb-bar-ot";
+          ot.style.left = pct(d.otStartMinutes) + "%";
+          ot.style.width = pct(outMin) - pct(d.otStartMinutes) + "%";
+          ot.title = `加班 ${minutesToHhmm(d.overtimeMinutes)}h`;
+          track.appendChild(ot);
+        }
       }
       const clockOut = document.createElement("div");
       clockOut.className = "tb-clockout";
@@ -427,10 +479,28 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     captureLog: Array<{ url: string; count: number; time: string; source: string }>,
+    busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
     ensureAttached();
     if (!attached) return;
+
+    if (busy?.mode === "fetch") {
+      showStatus(`正在获取 ${busy.month} …`);
+    } else if (busy?.mode === "backfill") {
+      showStatus(`正在回溯 ${busy.month} …`);
+    } else {
+      const last = captureLog.length > 0 ? captureLog[captureLog.length - 1] : undefined;
+      if (last && last.source === "api") {
+        const label = last.url.replace(/^api:/, "");
+        if (last.url.includes("失败")) showStatus(`${label} 获取失败`, "err");
+        else showStatus(`已获取 ${label} 的 ${last.count} 天记录`, "ok");
+      } else if (last && last.source === "backfill") {
+        showStatus(last.url, last.url.includes("失败") ? "err" : "ok");
+      }
+    }
+    fetchBtn.disabled = busy !== null;
+    backfillBtn.disabled = busy !== null;
 
     logEl.innerHTML = "";
     if (captureLog.length === 0) {

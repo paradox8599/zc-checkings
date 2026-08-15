@@ -4,6 +4,7 @@ export interface WorkConfig {
   overtimeBufferMinutes: number;
   overtimeFrom: "threshold" | "standard" | "8hours";
   lunchBreakMinutes: number;
+  weekendLunchBreak: boolean;
 }
 
 export const WORKDAY_HOURS = 8;
@@ -35,6 +36,7 @@ export interface DayStat {
   clockOut: string | null;
   workedMinutes: number;
   overtimeMinutes: number;
+  otStartMinutes: number | null;
   incomplete: boolean;
 }
 
@@ -65,20 +67,29 @@ export function computeDay(
   }
   const incomplete = !rec.clockIn || !rec.clockOut;
   let overtimeMinutes = 0;
+  let otStartMinutes: number | null = null;
   const wd = weekdayOf(rec.date);
   if (wd === 0 || wd === 6) {
-    overtimeMinutes = workedMinutes;
+    if (!work.weekendLunchBreak) workedMinutes = workedMinutes + work.lunchBreakMinutes;
+    overtimeMinutes = Math.max(workedMinutes, 0);
+    otStartMinutes = rec.clockIn ? timeToMinutes(rec.clockIn) : null;
   } else if (work.overtimeFrom === "8hours") {
     if (workedMinutes > WORKDAY_HOURS * 60) {
       overtimeMinutes = workedMinutes - WORKDAY_HOURS * 60;
+      if (rec.clockOut) otStartMinutes = timeToMinutes(rec.clockOut) - overtimeMinutes;
     }
   } else if (rec.clockOut) {
     const out = timeToMinutes(rec.clockOut);
     const end = timeToMinutes(work.standardEnd);
     const threshold = end + work.overtimeBufferMinutes;
     if (out > threshold) {
-      overtimeMinutes = work.overtimeFrom === "threshold" ? out - threshold : out - end;
+      const start = work.overtimeFrom === "threshold" ? threshold : end;
+      overtimeMinutes = out - start;
+      otStartMinutes = start;
     }
+  }
+  if (otStartMinutes !== null && rec.clockIn) {
+    otStartMinutes = Math.max(otStartMinutes, timeToMinutes(rec.clockIn));
   }
   return {
     date: rec.date,
@@ -86,6 +97,7 @@ export function computeDay(
     clockOut: rec.clockOut,
     workedMinutes,
     overtimeMinutes,
+    otStartMinutes,
     incomplete,
   };
 }
