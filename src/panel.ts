@@ -104,7 +104,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   updateBtn.type = "button";
   updateBtn.textContent = "更新";
   updateBtn.style.cssText = "display:none;font-size:11px;padding:1px 8px;cursor:pointer;border:none;border-radius:4px;background:#2e9e44;color:#fff";
-  updateBtn.onclick = () => window.open("https://github.com/paradox8599/zc-checkings/releases/latest", "_blank");
+  updateBtn.onclick = () => window.open("https://github.com/paradox8599/zc-checkings/releases/latest/download/attendance.release.user.js", "_blank");
   titleWrap.appendChild(updateBtn);
   header.appendChild(titleWrap);
   const collapseBtn = document.createElement("button");
