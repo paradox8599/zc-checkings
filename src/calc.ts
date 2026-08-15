@@ -20,7 +20,7 @@ export function fmtDuration(min: number): string {
   const abs = Math.abs(min);
   const h = Math.floor(abs / 60);
   const m = abs % 60;
-  return `${sign}${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 export interface DayStat {
