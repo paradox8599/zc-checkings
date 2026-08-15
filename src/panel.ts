@@ -62,6 +62,28 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .month-btn{display:block;width:100%;text-align:left;padding:3px 6px;font-size:11px;cursor:pointer;border:none;background:none;border-radius:4px;color:#4a5468}`,
     `#zc-attendance-panel .month-btn:hover{background:#eef1f7}`,
     `#zc-attendance-panel .month-btn.active{background:#3a5a9c;color:#fff;font-weight:600}`,
+    `#zc-attendance-panel .tb-table{margin:6px 0 4px}`,
+    `#zc-attendance-panel .tb-head{display:flex;align-items:flex-end;height:16px;margin-bottom:3px}`,
+    `#zc-attendance-panel .tb-head .tb-label{flex:0 0 62px}`,
+    `#zc-attendance-panel .tb-head .tb-clockin{flex:0 0 34px}`,
+    `#zc-attendance-panel .tb-head .tb-clockout{flex:0 0 34px}`,
+    `#zc-attendance-panel .tb-head .tb-meta{flex:0 0 80px}`,
+    `#zc-attendance-panel .tb-scale{flex:1;position:relative;height:12px}`,
+    `#zc-attendance-panel .tb-scale span{position:absolute;top:0;transform:translateX(-50%);font-size:9px;line-height:12px;color:#9aa3b2;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-row{display:flex;align-items:center;height:22px;border-top:1px solid #eef1f6}`,
+    `#zc-attendance-panel .tb-label{flex:0 0 62px;font-size:10px;color:#5a6478;white-space:nowrap;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-clockin{flex:0 0 34px;text-align:right;padding-right:4px;font-size:10px;color:#3a4356;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-clockout{flex:0 0 34px;text-align:left;padding-left:4px;font-size:10px;color:#3a4356;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-track{flex:1;position:relative;height:14px;background:#f2f4f9;border-radius:3px;overflow:hidden}`,
+    `#zc-attendance-panel .tb-tick{position:absolute;top:0;bottom:0;width:1px;background:#d5dae6}`,
+    `#zc-attendance-panel .tb-bar{position:absolute;top:1px;bottom:1px;background:#4a90d9;border-radius:2px}`,
+    `#zc-attendance-panel .tb-meta{flex:0 0 80px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-variant-numeric:tabular-nums}`,
+    `#zc-attendance-panel .tb-meta .ov{color:#c07b1c;font-weight:600}`,
+    `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
+    `#zc-attendance-panel .tb-row.weekend .tb-bar{background:#8f74d8}`,
+    `#zc-attendance-panel .tb-row.incomplete .tb-label{color:#a5adb8}`,
+    `#zc-attendance-panel .tb-row.incomplete .tb-track{background:#f4f5f8}`,
+    `#zc-attendance-panel .tb-row.today{border-top:2px solid #4a90d9;border-bottom:2px solid #4a90d9;background:#f0f7ff}`,
   ].join("\n");
   root.appendChild(style);
 
@@ -284,34 +306,101 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
 
-  function renderMonthTable(days: Summary["days"]): HTMLTableElement {
+  function renderMonthTable(days: Summary["days"]): HTMLElement {
+    const toMin = (t: string | null) => {
+      if (!t) return null;
+      const [h, m] = t.split(":").map(Number);
+      return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+    };
+    const mins = days.flatMap((d) => [toMin(d.clockIn), toMin(d.clockOut)]).filter((v): v is number => v !== null);
+    const box = document.createElement("div");
+    box.className = "tb-table";
+    if (mins.length === 0) return box;
+    const lo = Math.min(...mins);
+    const hi = Math.max(...mins);
+    let start = Math.floor(lo / 60) * 60 - 60;
+    let end = Math.ceil(hi / 60) * 60 + 60;
+    if (end - start < 8 * 60) {
+      const mid = (start + end) / 2;
+      start = mid - 4 * 60;
+      end = mid + 4 * 60;
+    }
+    const span = end - start;
+    const pct = (min: number) => ((min - start) / span) * 100;
+    const step = span > 720 ? 120 : 60;
+
+    const head = document.createElement("div");
+    head.className = "tb-head";
+    head.appendChild(document.createElement("div")).className = "tb-label";
+    head.appendChild(document.createElement("div")).className = "tb-clockin";
+    const scale = document.createElement("div");
+    scale.className = "tb-scale";
+    for (let t = Math.ceil(start / step) * step; t <= end; t += step) {
+      const lab = document.createElement("span");
+      lab.style.left = pct(t) + "%";
+      lab.textContent = `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+      scale.appendChild(lab);
+    }
+    head.appendChild(scale);
+    head.appendChild(document.createElement("div")).className = "tb-clockout";
+    head.appendChild(document.createElement("div")).className = "tb-meta";
+    box.appendChild(head);
+
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    const table = document.createElement("table");
-    table.innerHTML =
-      "<tr><th>日期</th><th>星期</th><th>上班</th><th>下班</th><th>工时</th><th>加班</th></tr>";
     for (const d of days) {
-      const tr = document.createElement("tr");
+      const inMin = toMin(d.clockIn);
+      const outMin = toMin(d.clockOut);
       const wd = new Date(d.date + "T00:00:00").getDay();
-      const isWeekend = wd === 0 || wd === 6;
-      if (isWeekend) tr.className = "weekend";
-      else if (d.incomplete) tr.className = "incomplete";
-      else if (d.overtimeMinutes > 0) tr.className = "ov";
-      if (d.date === todayStr) tr.classList.add("today");
-      const td = (txt: string) => {
-        const c = document.createElement("td");
-        c.textContent = txt;
-        return c;
-      };
-      tr.appendChild(td(d.date));
-      tr.appendChild(td(isWeekend ? `周${WEEKDAYS[wd]}` : `周${WEEKDAYS[wd]}`));
-      tr.appendChild(td(d.clockIn ?? "--"));
-      tr.appendChild(td(d.clockOut ?? "--"));
-      tr.appendChild(td(d.incomplete ? "--" : minutesToHhmm(d.workedMinutes)));
-      tr.appendChild(td(d.overtimeMinutes > 0 ? minutesToHhmm(d.overtimeMinutes) : "--"));
-      table.appendChild(tr);
+      const row = document.createElement("div");
+      row.className = "tb-row";
+      if (wd === 0 || wd === 6) row.classList.add("weekend");
+      else if (d.incomplete) row.classList.add("incomplete");
+      if (d.date === todayStr) row.classList.add("today");
+      const label = document.createElement("div");
+      label.className = "tb-label";
+      label.textContent = `${d.date.slice(5)} 周${WEEKDAYS[wd]}`;
+      const clockIn = document.createElement("div");
+      clockIn.className = "tb-clockin";
+      clockIn.textContent = d.clockIn ?? "--";
+      const track = document.createElement("div");
+      track.className = "tb-track";
+      for (let t = Math.ceil(start / step) * step; t <= end; t += step) {
+        const tick = document.createElement("div");
+        tick.className = "tb-tick";
+        tick.style.left = pct(t) + "%";
+        track.appendChild(tick);
+      }
+      if (inMin !== null && outMin !== null && outMin > inMin) {
+        const bar = document.createElement("div");
+        bar.className = "tb-bar";
+        bar.style.left = pct(inMin) + "%";
+        bar.style.width = pct(outMin) - pct(inMin) + "%";
+        bar.title = `${d.clockIn} - ${d.clockOut}`;
+        track.appendChild(bar);
+      }
+      const clockOut = document.createElement("div");
+      clockOut.className = "tb-clockout";
+      clockOut.textContent = d.clockOut ?? "--";
+      const meta = document.createElement("div");
+      meta.className = "tb-meta";
+      if (d.incomplete) {
+        meta.textContent = "--";
+      } else {
+        const w = document.createElement("span");
+        w.textContent = `${minutesToHhmm(d.workedMinutes)}h`;
+        meta.appendChild(w);
+        if (d.overtimeMinutes > 0) {
+          const ov = document.createElement("span");
+          ov.className = "ov";
+          ov.textContent = `+${minutesToHhmm(d.overtimeMinutes)}h`;
+          meta.appendChild(ov);
+        }
+      }
+      row.append(label, clockIn, track, clockOut, meta);
+      box.appendChild(row);
     }
-    return table;
+    return box;
   }
 
   function renderStats(s: Summary): HTMLElement {
