@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "node dev.mjs",
     "build": "node build.mjs",
     "release": "node build.mjs --release",
     "typecheck": "tsc --noEmit"

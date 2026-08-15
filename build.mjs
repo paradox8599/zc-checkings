@@ -1,11 +1,12 @@
-import { build } from "esbuild";
+import { build, context } from "esbuild";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const isRelease = process.argv.includes("--release");
+const isWatch = process.argv.includes("--watch");
 const repoUrl = "https://github.com/paradox8599/zc-checkings";
 const version = (process.env.RELEASE_VERSION || "0.0.0-dev").replace(/^v/, "");
 
-await build({
+const options = {
   entryPoints: ["src/main.ts"],
   bundle: true,
   outfile: "dist/core.js",
@@ -20,7 +21,14 @@ await build({
   banner: {
     js: `var __zcSet = function (k, v) { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); };\nvar __zcGet = function (k, d) { var r = localStorage.getItem(k); return r == null ? d : r; };`,
   },
-});
+};
+
+if (isWatch) {
+  await context(options).then((ctx) => ctx.watch());
+  console.log("watching src/ ...");
+} else {
+  await build(options);
+}
 
 const meta = `// @name         考勤加班统计
 // @namespace    zc-checkings
@@ -42,9 +50,7 @@ ${core}`;
   console.log(`built dist/attendance.release.user.js (${(release.length / 1024) | 0}KB, 可直接安装到 Tampermonkey)`);
 } else {
   const stub = `// ==UserScript==
-${meta}// @match        http://localhost:8878/*
-// @match        http://127.0.0.1:8878/*
-// ==/UserScript==
+${meta}// ==/UserScript==
 
 (function () {
   fetch("http://localhost:8877/core.js?t=" + Date.now())
