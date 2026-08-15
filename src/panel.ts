@@ -1,5 +1,5 @@
 import type { WorkConfig, Summary, MonthGroup } from "./calc";
-import type { AttendanceRecord } from "./dom";
+import type { AttendanceRecord } from "./api";
 import { fmtDuration, minutesToHhmm } from "./calc";
 
 export interface PanelActions {

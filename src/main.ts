@@ -1,5 +1,4 @@
-import { type AttendanceRecord } from "./dom";
-import { fetchMonthAttendances } from "./api";
+import { fetchMonthAttendances, type AttendanceRecord } from "./api";
 import { summarizeByMonth, type WorkConfig } from "./calc";
 import { createPanel } from "./panel";
 

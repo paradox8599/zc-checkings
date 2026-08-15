@@ -1,4 +1,8 @@
-import type { AttendanceRecord } from "./dom";
+export interface AttendanceRecord {
+  date: string;
+  clockIn: string | null;
+  clockOut: string | null;
+}
 
 interface SignInfo {
   signTime: string;
