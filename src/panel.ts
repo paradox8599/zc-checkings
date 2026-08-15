@@ -83,7 +83,8 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .tb-bar{position:absolute;top:1px;bottom:1px;background:#4a90d9;border-radius:2px}`,
     `#zc-attendance-panel .tb-bar-ot{position:absolute;top:1px;bottom:1px;background:#e8890c;border-radius:0 2px 2px 0}`,
     `#zc-attendance-panel .tb-meta{flex:0 0 80px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-variant-numeric:tabular-nums}`,
-    `#zc-attendance-panel .tb-meta .ov{color:#c07b1c;font-weight:600}`,
+    `#zc-attendance-panel .tb-meta .w{flex:0 0 34px;text-align:right}`,
+    `#zc-attendance-panel .tb-meta .ov{flex:0 0 40px;text-align:right;color:#c07b1c;font-weight:600}`,
     `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
     `#zc-attendance-panel .tb-row.weekend .tb-bar{background:#8f74d8}`,
     `#zc-attendance-panel .tb-row.incomplete .tb-label{color:#a5adb8}`,
@@ -481,14 +482,13 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
         meta.textContent = "--";
       } else {
         const w = document.createElement("span");
+        w.className = "w";
         w.textContent = `${minutesToHhmm(d.workedMinutes)}h`;
         meta.appendChild(w);
-        if (d.overtimeMinutes > 0) {
-          const ov = document.createElement("span");
-          ov.className = "ov";
-          ov.textContent = `+${minutesToHhmm(d.overtimeMinutes)}h`;
-          meta.appendChild(ov);
-        }
+        const ov = document.createElement("span");
+        ov.className = "ov";
+        if (d.overtimeMinutes > 0) ov.textContent = `+${minutesToHhmm(d.overtimeMinutes)}h`;
+        meta.appendChild(ov);
       }
       row.append(label, clockIn, track, clockOut, meta);
       box.appendChild(row);
