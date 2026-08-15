@@ -49,7 +49,6 @@ function loadRecords(): Map<string, AttendanceRecord> {
 
 let work: WorkConfig = loadWork();
 const records = loadRecords();
-const captureLog: Array<{ url: string; count: number; time: string; source: string }> = [];
 let apiFetching = false;
 let backfilling = false;
 let fetchingMonth = "";
@@ -85,19 +84,10 @@ const panel = createPanel(work, {
     backfilling = true;
     fetchingMonth = fromMonth;
     recompute();
-    backfillMonths(fromMonth)
-      .then((lastOk) => {
-        captureLog.push({
-          url: lastOk ? `已回溯 ${fromMonth} 至 ${lastOk}` : `回溯失败:${fromMonth}`,
-          count: 0,
-          time: new Date().toLocaleTimeString(),
-          source: "backfill",
-        });
-      })
-      .finally(() => {
-        backfilling = false;
-        recompute();
-      });
+    backfillMonths(fromMonth).finally(() => {
+      backfilling = false;
+      recompute();
+    });
   },
   onExport(all: AttendanceRecord[]) {
     if (all.length === 0) return;
@@ -133,7 +123,7 @@ function recompute(): void {
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;
-  panel.update(total, months, [...records.values()], captureLog, busy);
+  panel.update(total, months, [...records.values()], busy);
 }
 
 function mergeRecords(parsed: AttendanceRecord[]): boolean {
@@ -177,13 +167,10 @@ async function fetchMonth(yearMonth: string): Promise<boolean> {
   try {
     const parsed = await fetchMonthAttendances(yearMonth);
     const hasClock = parsed.some((r) => r.clockIn || r.clockOut);
-    captureLog.push({ url: `api:${yearMonth}`, count: parsed.length, time: new Date().toLocaleTimeString(), source: "api" });
-    if (captureLog.length > 50) captureLog.shift();
     mergeRecords(parsed);
     return hasClock;
   } catch (e) {
     console.error("[考勤] API 查询失败: " + (e as Error).message);
-    captureLog.push({ url: `api:${yearMonth} 失败`, count: 0, time: new Date().toLocaleTimeString(), source: "api" });
     return false;
   } finally {
     apiFetching = false;

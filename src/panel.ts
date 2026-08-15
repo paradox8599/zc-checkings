@@ -15,7 +15,6 @@ export interface Panel {
     summary: Summary,
     months: MonthGroup[],
     records: AttendanceRecord[],
-    captureLog: Array<{ url: string; count: number; time: string; source: string }>,
     busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
@@ -24,7 +23,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   const root = document.createElement("div");
   root.id = "zc-attendance-panel";
   root.style.cssText = [
-    "position:fixed", "top:16px", "right:16px", "z-index:2147483647",
+    "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
     "width:560px", "max-height:90vh", "overflow:auto",
     "background:#fff", "color:#222", "border:1px solid #ccc", "border-radius:8px",
     "box-shadow:0 4px 16px rgba(0,0,0,.25)", "font:12px/1.5 -apple-system,sans-serif",
@@ -188,7 +187,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   const miniBtn = document.createElement("button");
   miniBtn.textContent = "加班统计";
   miniBtn.style.cssText = [
-    "position:fixed", "top:16px", "right:16px", "z-index:2147483647",
+    "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
     "font-size:11px", "padding:3px 10px", "cursor:pointer",
     "border:none", "border-radius:6px", "background:linear-gradient(135deg,#3a5a9c,#5b7fd4)",
     "color:#fff", "box-shadow:0 2px 8px rgba(58,90,156,.35)", "display:none",
@@ -329,16 +328,6 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
   let attached = false;
-  const logEl = document.createElement("div");
-  logEl.style.cssText = "font:10px/1.4 monospace;color:#666;margin-top:6px;max-height:120px;overflow:auto;display:none";
-  contentWrap.appendChild(logEl);
-  const logToggle = document.createElement("button");
-  logToggle.textContent = "捕获日志";
-  logToggle.className = "btn";
-  logToggle.onclick = () => {
-    logEl.style.display = logEl.style.display === "none" ? "" : "none";
-  };
-  contentWrap.appendChild(logToggle);
 
   function ensureAttached() {
     if (attached) return;
@@ -486,7 +475,6 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     summary: Summary,
     months: MonthGroup[],
     records: AttendanceRecord[],
-    captureLog: Array<{ url: string; count: number; time: string; source: string }>,
     busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
@@ -497,29 +485,9 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       showStatus(`正在获取 ${busy.month} …`);
     } else if (busy?.mode === "backfill") {
       showStatus(`正在回溯 ${busy.month} …`);
-    } else {
-      const last = captureLog.length > 0 ? captureLog[captureLog.length - 1] : undefined;
-      if (last && last.source === "api") {
-        const label = last.url.replace(/^api:/, "");
-        if (last.url.includes("失败")) showStatus(`${label} 获取失败`, "err");
-        else showStatus(`已获取 ${label} 的 ${last.count} 天记录`, "ok");
-      } else if (last && last.source === "backfill") {
-        showStatus(last.url, last.url.includes("失败") ? "err" : "ok");
-      }
     }
     fetchBtn.disabled = busy !== null;
     backfillBtn.disabled = busy !== null;
-
-    logEl.innerHTML = "";
-    if (captureLog.length === 0) {
-      logEl.textContent = "尚未捕获任何数据。请切换到考勤日历页面。";
-    } else {
-      for (const c of [...captureLog].reverse()) {
-        const line = document.createElement("div");
-        line.textContent = `[${c.time}] [${c.source}] ${c.url} → ${c.count}条`;
-        logEl.appendChild(line);
-      }
-    }
 
     summaryEl.innerHTML = "";
     const summaryBox = document.createElement("div");
