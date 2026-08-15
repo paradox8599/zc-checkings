@@ -95,9 +95,18 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   const header = document.createElement("div");
   header.className = "zc-header";
   header.style.cssText = "display:flex;justify-content:space-between;align-items:center";
+  const titleWrap = document.createElement("div");
+  titleWrap.style.cssText = "display:flex;align-items:center;gap:12px";
   const title = document.createElement("h3");
   title.textContent = `考勤加班统计 v${__ZC_VERSION__}`;
-  header.appendChild(title);
+  titleWrap.appendChild(title);
+  const updateBtn = document.createElement("button");
+  updateBtn.type = "button";
+  updateBtn.textContent = "更新";
+  updateBtn.style.cssText = "display:none;font-size:11px;padding:1px 8px;cursor:pointer;border:none;border-radius:4px;background:#2e9e44;color:#fff";
+  updateBtn.onclick = () => window.open("https://github.com/paradox8599/zc-checkings/releases/latest", "_blank");
+  titleWrap.appendChild(updateBtn);
+  header.appendChild(titleWrap);
   const collapseBtn = document.createElement("button");
   collapseBtn.textContent = "收起";
   header.appendChild(collapseBtn);
@@ -200,6 +209,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     } else {
       root.style.display = "";
       miniBtn.style.display = "none";
+      checkUpdate();
     }
   };
   const collapseBody = () => {
@@ -207,6 +217,35 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   };
   collapseBtn.onclick = collapseBody;
   miniBtn.onclick = collapseBody;
+
+  let updateChecking = false;
+  const versionParts = (v: string): number[] =>
+    v.replace(/^v/, "").split(".").map((n) => Number(n) || 0);
+  const versionGt = (a: string, b: string): boolean => {
+    const pa = versionParts(a);
+    const pb = versionParts(b);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const x = pa[i] ?? 0;
+      const y = pb[i] ?? 0;
+      if (x !== y) return x > y;
+    }
+    return false;
+  };
+  const checkUpdate = () => {
+    if (updateChecking || __ZC_VERSION__ === "0.0.0-dev") return;
+    updateChecking = true;
+    fetch("https://api.github.com/repos/paradox8599/zc-checkings/releases/latest", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.tag_name === "string" && versionGt(data.tag_name, __ZC_VERSION__)) {
+          updateBtn.style.display = "";
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        updateChecking = false;
+      });
+  };
 
   const summaryEl = document.createElement("div");
   summaryEl.className = "stat";
