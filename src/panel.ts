@@ -115,145 +115,6 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   contentWrap.className = "zc-content";
   root.appendChild(contentWrap);
 
-  const now = new Date();
-  const curYear = now.getFullYear();
-  let apiYear = curYear;
-  let apiMonthNum = now.getMonth() + 1;
-  const apiMonthStr = () => `${apiYear}-${String(apiMonthNum).padStart(2, "0")}`;
-  const monthRow = document.createElement("div");
-  monthRow.style.cssText = "display:flex;align-items:center;gap:4px;justify-content:space-between;margin:0 0 8px";
-  const monthNav = document.createElement("div");
-  monthNav.style.cssText = "display:flex;align-items:center;gap:8px";
-
-  const yearSel = document.createElement("select");
-  yearSel.style.cssText = "font-size:12px;padding:1px 2px";
-  for (let y = curYear; y >= 2015; y--) {
-    const opt = document.createElement("option");
-    opt.value = String(y);
-    opt.textContent = `${y} 年`;
-    yearSel.appendChild(opt);
-  }
-  yearSel.value = String(apiYear);
-
-  const monthSel = document.createElement("select");
-  monthSel.style.cssText = "font-size:12px;padding:1px 2px";
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.createElement("option");
-    opt.value = String(m);
-    opt.textContent = `${m} 月`;
-    monthSel.appendChild(opt);
-  }
-  monthSel.value = String(apiMonthNum);
-
-  yearSel.onchange = () => {
-    apiYear = Number(yearSel.value);
-  };
-  monthSel.onchange = () => {
-    apiMonthNum = Number(monthSel.value);
-  };
-
-  monthNav.append(yearSel, monthSel);
-  const statusEl = document.createElement("div");
-  statusEl.className = "zc-status";
-  let statusTimer: number | null = null;
-  const showStatus = (msg: string, kind: "busy" | "ok" | "err" = "busy") => {
-    if (statusTimer !== null) window.clearTimeout(statusTimer);
-    statusTimer = null;
-    statusEl.textContent = msg;
-    statusEl.className = "zc-status" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
-    if (kind !== "busy") {
-      statusTimer = window.setTimeout(() => {
-        if (statusEl.textContent === msg) {
-          statusEl.textContent = "";
-          statusEl.className = "zc-status";
-        }
-      }, 3000);
-    }
-  };
-  const fetchBtn = document.createElement("button");
-  fetchBtn.type = "button";
-  fetchBtn.textContent = "获取";
-  fetchBtn.className = "btn";
-  fetchBtn.onclick = () => {
-    fetchBtn.disabled = true;
-    backfillBtn.disabled = true;
-    showStatus(`正在获取 ${apiMonthStr()} …`);
-    actions.onApiFetchMonth(apiMonthStr());
-  };
-  const backfillBtn = document.createElement("button");
-  backfillBtn.type = "button";
-  backfillBtn.textContent = "回溯";
-  backfillBtn.className = "btn";
-  backfillBtn.onclick = () => {
-    fetchBtn.disabled = true;
-    backfillBtn.disabled = true;
-    showStatus(`正在回溯 ${apiMonthStr()} …`);
-    actions.onApiBackfill(apiMonthStr());
-  };
-  monthRow.append(monthNav, statusEl, fetchBtn, backfillBtn);
-  contentWrap.appendChild(monthRow);
-
-  const miniBtn = document.createElement("button");
-  miniBtn.textContent = "加班统计";
-  miniBtn.style.cssText = [
-    "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
-    "font-size:11px", "padding:3px 10px", "cursor:pointer",
-    "border:none", "border-radius:6px", "background:linear-gradient(135deg,#3a5a9c,#5b7fd4)",
-    "color:#fff", "box-shadow:0 2px 8px rgba(58,90,156,.35)", "display:none",
-  ].join(";");
-
-  const setCollapsed = (collapsed: boolean) => {
-    if (collapsed) {
-      root.style.display = "none";
-      miniBtn.style.display = "";
-    } else {
-      root.style.display = "";
-      miniBtn.style.display = "none";
-      checkUpdate();
-    }
-  };
-  const collapseBody = () => {
-    setCollapsed(root.style.display !== "none");
-  };
-  collapseBtn.onclick = collapseBody;
-  miniBtn.onclick = collapseBody;
-
-  let updateChecking = false;
-  const versionParts = (v: string): number[] =>
-    v.replace(/^v/, "").split(".").map((n) => Number(n) || 0);
-  const versionGt = (a: string, b: string): boolean => {
-    const pa = versionParts(a);
-    const pb = versionParts(b);
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-      const x = pa[i] ?? 0;
-      const y = pb[i] ?? 0;
-      if (x !== y) return x > y;
-    }
-    return false;
-  };
-  const checkUpdate = () => {
-    if (updateChecking || __ZC_VERSION__ === "0.0.0-dev") return;
-    updateChecking = true;
-    fetch("https://api.github.com/repos/paradox8599/zc-checkings/releases/latest", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && typeof data.tag_name === "string" && versionGt(data.tag_name, __ZC_VERSION__)) {
-          updateBtn.style.display = "";
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        updateChecking = false;
-      });
-  };
-
-  const summaryEl = document.createElement("div");
-  summaryEl.className = "stat";
-  contentWrap.appendChild(summaryEl);
-
-  const body = document.createElement("div");
-  contentWrap.appendChild(body);
-
   const configBox = document.createElement("div");
 
   const form = document.createElement("div");
@@ -360,9 +221,147 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   toggleBtn.onclick = () => {
     configBox.style.display = configBox.style.display === "none" ? "" : "none";
   };
-  contentWrap.appendChild(toggleBtn);
   configBox.style.display = "none";
+
+  const now = new Date();
+  const curYear = now.getFullYear();
+  let apiYear = curYear;
+  let apiMonthNum = now.getMonth() + 1;
+  const apiMonthStr = () => `${apiYear}-${String(apiMonthNum).padStart(2, "0")}`;
+  const monthRow = document.createElement("div");
+  monthRow.style.cssText = "display:flex;align-items:center;gap:4px;justify-content:space-between;margin:0 0 8px";
+  const monthNav = document.createElement("div");
+  monthNav.style.cssText = "display:flex;align-items:center;gap:8px";
+
+  const yearSel = document.createElement("select");
+  yearSel.style.cssText = "font-size:12px;padding:1px 2px";
+  for (let y = curYear; y >= 2015; y--) {
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = `${y} 年`;
+    yearSel.appendChild(opt);
+  }
+  yearSel.value = String(apiYear);
+
+  const monthSel = document.createElement("select");
+  monthSel.style.cssText = "font-size:12px;padding:1px 2px";
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement("option");
+    opt.value = String(m);
+    opt.textContent = `${m} 月`;
+    monthSel.appendChild(opt);
+  }
+  monthSel.value = String(apiMonthNum);
+
+  yearSel.onchange = () => {
+    apiYear = Number(yearSel.value);
+  };
+  monthSel.onchange = () => {
+    apiMonthNum = Number(monthSel.value);
+  };
+
+  monthNav.append(yearSel, monthSel);
+  const statusEl = document.createElement("div");
+  statusEl.className = "zc-status";
+  let statusTimer: number | null = null;
+  const showStatus = (msg: string, kind: "busy" | "ok" | "err" = "busy") => {
+    if (statusTimer !== null) window.clearTimeout(statusTimer);
+    statusTimer = null;
+    statusEl.textContent = msg;
+    statusEl.className = "zc-status" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
+    if (kind !== "busy") {
+      statusTimer = window.setTimeout(() => {
+        if (statusEl.textContent === msg) {
+          statusEl.textContent = "";
+          statusEl.className = "zc-status";
+        }
+      }, 3000);
+    }
+  };
+  const fetchBtn = document.createElement("button");
+  fetchBtn.type = "button";
+  fetchBtn.textContent = "获取";
+  fetchBtn.className = "btn";
+  fetchBtn.onclick = () => {
+    fetchBtn.disabled = true;
+    backfillBtn.disabled = true;
+    showStatus(`正在获取 ${apiMonthStr()} …`);
+    actions.onApiFetchMonth(apiMonthStr());
+  };
+  const backfillBtn = document.createElement("button");
+  backfillBtn.type = "button";
+  backfillBtn.textContent = "回溯";
+  backfillBtn.className = "btn";
+  backfillBtn.onclick = () => {
+    fetchBtn.disabled = true;
+    backfillBtn.disabled = true;
+    showStatus(`正在回溯 ${apiMonthStr()} …`);
+    actions.onApiBackfill(apiMonthStr());
+  };
+  monthRow.append(monthNav, fetchBtn, backfillBtn, statusEl, toggleBtn);
+  contentWrap.appendChild(monthRow);
   contentWrap.appendChild(configBox);
+
+  const miniBtn = document.createElement("button");
+  miniBtn.textContent = "加班统计";
+  miniBtn.style.cssText = [
+    "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
+    "font-size:11px", "padding:3px 10px", "cursor:pointer",
+    "border:none", "border-radius:6px", "background:linear-gradient(135deg,#3a5a9c,#5b7fd4)",
+    "color:#fff", "box-shadow:0 2px 8px rgba(58,90,156,.35)", "display:none",
+  ].join(";");
+
+  const setCollapsed = (collapsed: boolean) => {
+    if (collapsed) {
+      root.style.display = "none";
+      miniBtn.style.display = "";
+    } else {
+      root.style.display = "";
+      miniBtn.style.display = "none";
+      checkUpdate();
+    }
+  };
+  const collapseBody = () => {
+    setCollapsed(root.style.display !== "none");
+  };
+  collapseBtn.onclick = collapseBody;
+  miniBtn.onclick = collapseBody;
+
+  let updateChecking = false;
+  const versionParts = (v: string): number[] =>
+    v.replace(/^v/, "").split(".").map((n) => Number(n) || 0);
+  const versionGt = (a: string, b: string): boolean => {
+    const pa = versionParts(a);
+    const pb = versionParts(b);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const x = pa[i] ?? 0;
+      const y = pb[i] ?? 0;
+      if (x !== y) return x > y;
+    }
+    return false;
+  };
+  const checkUpdate = () => {
+    if (updateChecking || __ZC_VERSION__ === "0.0.0-dev") return;
+    updateChecking = true;
+    fetch("https://api.github.com/repos/paradox8599/zc-checkings/releases/latest", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.tag_name === "string" && versionGt(data.tag_name, __ZC_VERSION__)) {
+          updateBtn.style.display = "";
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        updateChecking = false;
+      });
+  };
+
+  const summaryEl = document.createElement("div");
+  summaryEl.className = "stat";
+  contentWrap.appendChild(summaryEl);
+
+  const body = document.createElement("div");
+  contentWrap.appendChild(body);
 
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
@@ -524,6 +523,8 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       showStatus(`正在获取 ${busy.month} …`);
     } else if (busy?.mode === "backfill") {
       showStatus(`正在回溯 ${busy.month} …`);
+    } else if (statusEl.className === "zc-status" && statusEl.textContent) {
+      statusEl.textContent = "";
     }
     fetchBtn.disabled = busy !== null;
     backfillBtn.disabled = busy !== null;
