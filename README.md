@@ -1,6 +1,6 @@
 # ZC 考勤加班统计
 
-Tampermonkey 用户脚本：从公司考勤日历页面读取打卡记录（手动翻月累积），对比正常工作时间计算加班。
+Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份累积），对比正常工作时间计算加班。
 
 ## 安装 Tampermonkey
 
@@ -18,9 +18,8 @@ Tampermonkey 用户脚本：从公司考勤日历页面读取打卡记录（手�
 1. 安装脚本（任选其一），Tampermonkey 会识别并安装：
    - 最新发布版：[安装 latest](https://github.com/paradox8599/zc-checkings/releases/latest/download/attendance.release.user.js)
    - 本地开发版：[安装 dev](http://localhost:8877/attendance.user.js)
-2. 登录考勤系统，进入「考勤日历」tab。
-3. **手动翻月**（通过年月选择器切换月份），脚本自动抓取当前页面的打卡数据并持久化到 localStorage，跨月份累积。
-4. 浮动面板实时显示：出勤天数、平均工时、加班天数、总加班、每日明细（含工时与加班）。
+2. 登录考勤系统，脚本在网站**任意页面**自动生效。
+3. 浮动面板实时显示：出勤天数、平均工时、加班天数、总加班、每日明细（含工时与加班）。可通过面板切换月份、「获取」拉取数据，跨月份累积。
 
 ## 加班规则
 
@@ -43,23 +42,32 @@ Tampermonkey 用户脚本：从公司考勤日历页面读取打卡记录（手�
 
 ## 本地调试工作流
 
-改动 `src/*.ts` 后只需 `node build.mjs`，再刷新页面即生效——无需在 Tampermonkey 里点更新。
+一键启动开发环境：
 
-原理：`dist/attendance.user.js` 是零 `@grant` 的 stub，`document-idle` 时 fetch `http://localhost:8877/core.js?t=<时间戳>`（时间戳绕过缓存）并直接 `eval`。build 时 esbuild 用 `define` 把 `GM_setValue`/`GM_getValue` 替换为 localStorage 读写函数（见 `build.mjs` 的 `banner`）。
+```bash
+npm run dev
+```
+
+自动完成：构建（watch 模式，改动 `src/*.ts` 自动重建）→ 起本地服务（8877）→ 启动独立 Chrome（临时 profile，自动加载 Tampermonkey 并安装 dev 版脚本）→ 打开考勤系统页面。
+
+首次启动会下载 Tampermonkey 并安装脚本（耗时几秒）；之后复用 profile，秒开。后续改动只需刷新考勤系统页面即生效，无需在 Tampermonkey 里点更新。
+
+Chrome 带 `--remote-debugging-port=9222`，AI 调试时用 `agent-browser --cdp 9222 <命令>` 连接（快照、点击、读控制台等）。
+
+原理：`dist/attendance.user.js` 是零 `@grant` 的 stub（`@match` 真实考勤系统域名），`document-idle` 时 fetch `http://localhost:8877/core.js?t=<时间戳>`（时间戳绕过缓存）并直接 `eval`。build 时 esbuild 用 `define` 把 `GM_setValue`/`GM_getValue` 替换为 localStorage 读写函数（见 `build.mjs` 的 `banner`）。
 
 ## 目录结构
 
 ```
-src/main.ts      入口：初始化、面板、DOM 扫描、持久化、合并去重
-src/dom.ts       硬编码考勤日历 DOM 解析（.ant-fullcalendar-* 结构）
+src/main.ts      入口：初始化、面板、数据获取、持久化、合并去重
+src/api.ts       考勤 API 数据获取（fetchMonthAttendances）+ AttendanceRecord 类型
 src/calc.ts      工时/加班纯计算
 src/panel.ts     浮动面板 UI
-build.mjs        esbuild 打包 + 生成 stub
+build.mjs        esbuild 打包（支持 --watch）+ 生成 stub
+dev.mjs          一键启动开发环境（build watch + 本地服务 + Chrome profile）
 dist/            core.js（逻辑）+ attendance.user.js（stub）
-test/            mock 考勤服务器（开发用）
 ```
 
 ## 依赖
 
-- 本地调试需要 `http://localhost:8877` 服务 `dist/` 目录（`node test/serve-dist.mjs`）。
-- mock 测试：`node test/mock-api.cjs`（端口 8878）。
+- 本地调试：`npm run dev` 会自动准备一切（Tampermonkey 下载、临时 Chrome profile，见 `.dev/`）。
