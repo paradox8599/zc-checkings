@@ -12,6 +12,7 @@ const DEFAULT_WORK: WorkConfig = {
   overtimeFrom: "threshold",
   lunchBreakMinutes: 0,
   weekendLunchBreak: false,
+  minOvertimeMinutes: 0,
 };
 
 function loadWork(): WorkConfig {
@@ -64,6 +65,7 @@ const panel = createPanel(work, {
         !Number.isFinite(next.overtimeBufferMinutes) ||
         !Number.isFinite(next.lunchBreakMinutes) ||
         typeof next.weekendLunchBreak !== "boolean" ||
+        !Number.isFinite(next.minOvertimeMinutes) ||
         (next.overtimeFrom !== "threshold" && next.overtimeFrom !== "standard" && next.overtimeFrom !== "8hours")
       ) {
         throw new Error("配置格式不合法");

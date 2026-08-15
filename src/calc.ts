@@ -5,6 +5,7 @@ export interface WorkConfig {
   overtimeFrom: "threshold" | "standard" | "8hours";
   lunchBreakMinutes: number;
   weekendLunchBreak: boolean;
+  minOvertimeMinutes: number;
 }
 
 export const WORKDAY_HOURS = 8;
@@ -70,9 +71,11 @@ export function computeDay(
   let otStartMinutes: number | null = null;
   const wd = weekdayOf(rec.date);
   if (wd === 0 || wd === 6) {
-    if (!work.weekendLunchBreak) workedMinutes = workedMinutes + work.lunchBreakMinutes;
-    overtimeMinutes = Math.max(workedMinutes, 0);
-    otStartMinutes = rec.clockIn ? timeToMinutes(rec.clockIn) : null;
+    if (rec.clockIn && rec.clockOut) {
+      if (!work.weekendLunchBreak) workedMinutes = workedMinutes + work.lunchBreakMinutes;
+      overtimeMinutes = Math.max(workedMinutes, 0);
+      otStartMinutes = timeToMinutes(rec.clockIn);
+    }
   } else if (work.overtimeFrom === "8hours") {
     if (workedMinutes > WORKDAY_HOURS * 60) {
       overtimeMinutes = workedMinutes - WORKDAY_HOURS * 60;
@@ -90,6 +93,10 @@ export function computeDay(
   }
   if (otStartMinutes !== null && rec.clockIn) {
     otStartMinutes = Math.max(otStartMinutes, timeToMinutes(rec.clockIn));
+  }
+  if (overtimeMinutes < work.minOvertimeMinutes) {
+    overtimeMinutes = 0;
+    otStartMinutes = null;
   }
   return {
     date: rec.date,

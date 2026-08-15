@@ -249,6 +249,12 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   bufferIn.step = "5";
   bufferIn.value = String(work.overtimeBufferMinutes);
   bufferIn.style.width = "70px";
+  const minOtIn = document.createElement("input");
+  minOtIn.type = "number";
+  minOtIn.min = "0";
+  minOtIn.step = "1";
+  minOtIn.value = String(work.minOvertimeMinutes);
+  minOtIn.style.width = "70px";
   const fromSel = document.createElement("select");
   const optThreshold = document.createElement("option");
   optThreshold.value = "threshold";
@@ -270,7 +276,8 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     mkRow("上班时间", startIn),
     mkRow("下班时间", endIn),
     mkRow("午休(分钟)", lunchIn),
-    mkRow("宽限(分钟)", bufferIn),
+    mkRow("下班(分钟)内不算加班", bufferIn),
+    mkRow("少于(分钟)不算加班", minOtIn),
     mkRow("加班计算", fromSel),
     mkRow("周末扣午休", weekendLunchChk),
   );
@@ -286,6 +293,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       standardEnd: endIn.value,
       lunchBreakMinutes: Number(lunchIn.value),
       overtimeBufferMinutes: Number(bufferIn.value),
+      minOvertimeMinutes: Number(minOtIn.value),
       overtimeFrom: fromSel.value as WorkConfig["overtimeFrom"],
       weekendLunchBreak: weekendLunchChk.checked,
     };
