@@ -17,6 +17,7 @@ const options = {
   define: {
     GM_setValue: "__zcSet",
     GM_getValue: "__zcGet",
+    __ZC_VERSION__: JSON.stringify(version),
   },
   banner: {
     js: `var __zcSet = function (k, v) { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); };\nvar __zcGet = function (k, d) { var r = localStorage.getItem(k); return r == null ? d : r; };`,

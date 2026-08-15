@@ -97,7 +97,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   header.className = "zc-header";
   header.style.cssText = "display:flex;justify-content:space-between;align-items:center";
   const title = document.createElement("h3");
-  title.textContent = "考勤加班统计";
+  title.textContent = `考勤加班统计 v${__ZC_VERSION__}`;
   header.appendChild(title);
   const collapseBtn = document.createElement("button");
   collapseBtn.textContent = "收起";
