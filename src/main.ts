@@ -6,6 +6,8 @@ import { createPanel } from "./panel";
 const RECORDS_KEY = "zc-attendance-records";
 const WORK_KEY = "zc-attendance-work";
 const LEAVES_KEY = "zc-leave-records";
+const LEAVE_START_KEY = "zc-leave-start";
+const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
   standardStart: "08:30",
@@ -80,9 +82,19 @@ function newLeaveId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function loadLeaveStart(): string {
+  try {
+    const stored = GM_getValue(LEAVE_START_KEY, DEFAULT_LEAVE_START);
+    return typeof stored === "string" ? stored : DEFAULT_LEAVE_START;
+  } catch {
+    return DEFAULT_LEAVE_START;
+  }
+}
+
 let work: WorkConfig = loadWork();
 const records = loadRecords();
 let leaves: LeaveEntry[] = loadLeaves();
+let leaveStart = loadLeaveStart();
 let apiFetching = false;
 let backfilling = false;
 let fetchingMonth = "";
@@ -169,6 +181,11 @@ const panel = createPanel(work, {
     persistLeaves();
     recompute();
   },
+  onSaveLeaveStart(date: string) {
+    leaveStart = date;
+    GM_setValue(LEAVE_START_KEY, date);
+    recompute();
+  },
   onClear() {
     records.clear();
     persist();
@@ -193,7 +210,7 @@ function recompute(): void {
   const all = [...records.values()];
   const { total, months } = summarizeByMonth(all, work);
   const overtimeDays = total.days.map((d) => ({ date: d.date, minutes: d.overtimeMinutes }));
-  const ledger = buildLedger(overtimeDays, leaves);
+  const ledger = buildLedger(overtimeDays, leaves, leaveStart);
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;

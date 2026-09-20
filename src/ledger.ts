@@ -37,6 +37,7 @@ export interface LeaveBreakdown {
 }
 
 export interface Ledger {
+  startDate: string;
   days: LedgerDay[];
   breakdowns: LeaveBreakdown[];
   totalOvertime: number;
@@ -48,9 +49,9 @@ export function leaveMinutes(leave: LeaveEntry): number {
   return Math.max(timeToMinutes(leave.end) - timeToMinutes(leave.start), 0);
 }
 
-export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[]): Ledger {
+export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], startDate = ""): Ledger {
   const days: LedgerDay[] = overtimeDays
-    .filter((d) => d.minutes > 0)
+    .filter((d) => d.minutes > 0 && (!startDate || d.date >= startDate))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((d) => ({ date: d.date, minutes: d.minutes, consumed: 0, remaining: d.minutes }));
 
@@ -89,6 +90,7 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[]): 
   }
 
   return {
+    startDate,
     days,
     breakdowns,
     totalOvertime,

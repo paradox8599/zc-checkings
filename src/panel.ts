@@ -11,6 +11,7 @@ export interface PanelActions {
   onExport(records: AttendanceRecord[], monthKey?: string | null): void;
   onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
   onDeleteLeave(id: string): void;
+  onSaveLeaveStart(date: string): void;
   onClear(): void;
 }
 
@@ -347,6 +348,16 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   exportMonthBtn.onclick = () => actions.onExport(currentRecords, selectedKey);
   const ledgerBox = document.createElement("div");
 
+  const startDateIn = document.createElement("input");
+  startDateIn.type = "date";
+  startDateIn.style.cssText = "font-size:11px;padding:1px 3px";
+  startDateIn.onchange = () => actions.onSaveLeaveStart(startDateIn.value);
+  const startRow = document.createElement("label");
+  startRow.style.cssText = "display:flex;align-items:center;gap:6px;font-size:11px;color:#5a6478;margin-bottom:6px";
+  const startLabel = document.createElement("span");
+  startLabel.textContent = "加班起算日期（早于此日期的加班不计入）";
+  startRow.append(startLabel, startDateIn);
+
   const ledgerStats = document.createElement("div");
   ledgerStats.className = "stat-line";
   ledgerStats.style.marginBottom = "6px";
@@ -411,6 +422,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   declWrap.append(declText, declCopyBtn);
 
   const renderLedger = (ledger: Ledger): void => {
+    startDateIn.value = ledger.startDate;
     ledgerStats.innerHTML = "";
     const chips: Array<[string, string, boolean]> = [
       ["累计加班", fmtDuration(ledger.totalOvertime), false],
@@ -465,7 +477,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     }
   };
 
-  ledgerBox.append(ledgerStats, leaveForm, leaveList, declWrap);
+  ledgerBox.append(startRow, ledgerStats, leaveForm, leaveList, declWrap);
   ledgerView.appendChild(ledgerBox);
 
   const toolRow = document.createElement("div");
