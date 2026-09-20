@@ -109,6 +109,24 @@ export function summarize(
   };
 }
 
+/** 叠加每日手工修正（单位分钟，可为负），只影响加班时长，工时不动 */
+export function withDayAdjustments(summary: Summary, adjust: Record<string, number>): Summary {
+  let changed = false;
+  const days = summary.days.map((d) => {
+    const delta = adjust[d.date] ?? 0;
+    if (delta === 0) return d;
+    changed = true;
+    return { ...d, overtimeMinutes: d.overtimeMinutes + delta };
+  });
+  if (!changed) return summary;
+  return {
+    ...summary,
+    days,
+    overtimeDays: days.filter((d) => d.overtimeMinutes > 0).length,
+    totalOvertimeMinutes: days.reduce((s, d) => s + d.overtimeMinutes, 0),
+  };
+}
+
 export function monthKey(date: string): string {
   return date.slice(0, 7);
 }

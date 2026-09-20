@@ -9,18 +9,15 @@ export interface LeaveEntry {
 }
 
 export interface OvertimeDay {
-  /** 排序键：真实加班日为 YYYY-MM-DD，整月修正为 YYYY-MM */
+  /** 加班日期 YYYY-MM-DD */
   date: string;
   minutes: number;
-  /** 整月修正的显示名（如「2026年8月」）；为空表示这是某天的加班 */
-  label?: string;
   /** false 表示该月还没上报给公司，不计入可抵扣时间 */
   reported?: boolean;
 }
 
 export interface LedgerDay {
   date: string;
-  label?: string;
   minutes: number;
   consumed: number;
   writtenOff: number;
@@ -29,7 +26,6 @@ export interface LedgerDay {
 
 export interface LeavePart {
   date: string;
-  label?: string;
   minutes: number;
   writtenOff: number;
   consumedBefore: number;
@@ -50,7 +46,7 @@ export interface Ledger {
   days: LedgerDay[];
   writeOffs: OvertimeDay[];
   breakdowns: LeaveBreakdown[];
-  /** 可抵扣加班合计（已上报月份的加班与修正） */
+  /** 可抵扣加班合计（已上报月份修正后的加班） */
   totalOvertime: number;
   /** 未上报月份的加班合计，不计入可抵扣时间 */
   unreportedMinutes: number;
@@ -63,22 +59,17 @@ export function leaveMinutes(leave: LeaveEntry): number {
 }
 
 export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], startDate = ""): Ledger {
-  // 整月修正只精确到月，起算日期按月比较；真实加班日按日比较
-  const inRange = (d: OvertimeDay) =>
-    !startDate || (d.label ? d.date >= startDate.slice(0, 7) : d.date >= startDate);
-
-  // 整月修正排在该月所有加班日之后：它是对整月的兜底修正，不对应某一天
-  const orderKey = (d: OvertimeDay) => (d.label ? `${d.date}\uffff` : d.date);
+  const inRange = (d: OvertimeDay) => !startDate || d.date >= startDate;
 
   const items = overtimeDays
     .filter((d) => d.reported !== false && d.minutes !== 0 && inRange(d))
-    .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   const days: LedgerDay[] = items
     .filter((d) => d.minutes > 0)
-    .map((d) => ({ date: d.date, label: d.label, minutes: d.minutes, consumed: 0, writtenOff: 0, remaining: d.minutes }));
+    .map((d) => ({ date: d.date, minutes: d.minutes, consumed: 0, writtenOff: 0, remaining: d.minutes }));
 
-  // 负数修正不是抵扣，而是「这些加班本来就不存在」：从该月起冲减最早的可抵扣加班
+  // 某天加班被修正为负数时不做抵扣，而是「这些加班本来就不存在」：从该月起冲减最早的可抵扣加班
   const writeOffs = items.filter((d) => d.minutes < 0);
   let writeCursor = 0;
   for (const adj of writeOffs) {
@@ -114,7 +105,6 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
       if (take > 0) {
         parts.push({
           date: day.date,
-          label: day.label,
           minutes: take,
           writtenOff: day.writtenOff,
           consumedBefore: day.consumed,
@@ -184,9 +174,7 @@ export function renderDeclaration(ledger: Ledger, leaveId: string): string {
     bd.parts.forEach((p, i) => {
       const day = ledger.days.find((d) => d.date === p.date);
       const overtime = day ? day.minutes : 0;
-      const what = p.label
-        ? `${p.label}修正加班 ${fmtHM(overtime)}`
-        : `${fmtDate(p.date)}（${weekdayLabel(p.date)}）加班 ${fmtHM(overtime)}`;
+      const what = `${fmtDate(p.date)}（${weekdayLabel(p.date)}）加班 ${fmtHM(overtime)}`;
       const offset = p.writtenOff > 0 ? `（其中 ${fmtHM(p.writtenOff)}已按修正扣除）` : "";
       const tail = i === bd.parts.length - 1 && ledger.writeOffs.length === 0 ? "。" : "；";
       lines.push(
@@ -195,7 +183,7 @@ export function renderDeclaration(ledger: Ledger, leaveId: string): string {
       );
     });
     for (const w of ledger.writeOffs) {
-      lines.push(`- ${w.label ?? w.date}修正 ${fmtHM(w.minutes)}，该笔不计入抵扣。`);
+      lines.push(`- ${fmtDate(w.date)}修正 ${fmtHM(w.minutes)}，该笔不计入抵扣。`);
     }
   }
 

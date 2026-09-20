@@ -1,7 +1,9 @@
 import type { WorkConfig, Summary, MonthGroup } from "./calc";
 import type { AttendanceRecord } from "./api";
 import type { Ledger, LeaveEntry } from "./ledger";
+import type { FormConfig } from "./form";
 import { fmtDuration } from "./calc";
+import { autoFileName } from "./form";
 import { renderDeclaration } from "./ledger";
 
 export interface PanelActions {
@@ -9,10 +11,12 @@ export interface PanelActions {
   onApiFetchMonth(month: string): void;
   onApiBackfill(fromMonth: string): void;
   onExport(records: AttendanceRecord[], monthKey?: string | null): void;
+  onSaveForm(form: FormConfig): { ok: boolean; error?: string };
+  onExportForm(monthKey: string | null, form: FormConfig): void;
   onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
   onDeleteLeave(id: string): void;
   onSaveLeaveStart(date: string): void;
-  onSaveMonthAdjust(month: string, minutes: number): { ok: boolean; error?: string };
+  onSaveDayAdjust(date: string, minutes: number): { ok: boolean; error?: string };
   onToggleReported(month: string, reported: boolean): void;
   onClear(): void;
 }
@@ -23,18 +27,18 @@ export interface Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     ledger: Ledger,
-    adjustments: Record<string, number>,
+    dayAdjust: Record<string, number>,
     reported: string[],
     busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
 
-export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
+export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: PanelActions): Panel {
   const root = document.createElement("div");
   root.id = "zc-attendance-panel";
   root.style.cssText = [
     "position:fixed", "top:64px", "right:16px", "z-index:2147483647",
-    "width:720px", "max-height:90vh", "overflow:auto",
+    "width:900px", "max-height:90vh", "overflow:auto",
     "background:#fff", "color:#222", "border:1px solid #ccc", "border-radius:8px",
     "box-shadow:0 4px 16px rgba(0,0,0,.25)", "font:12px/1.5 -apple-system,sans-serif",
     "padding:0", "box-sizing:border-box", "display:none",
@@ -98,6 +102,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .tb-meta{flex:0 0 100px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
     `#zc-attendance-panel .tb-meta .w{flex:0 0 44px;text-align:right;color:#2e6bd8}`,
     `#zc-attendance-panel .tb-meta .ov{flex:0 0 50px;text-align:right;color:#c07b1c}`,
+    `#zc-attendance-panel .tb-head .tb-adjust{flex:0 0 52px;padding-left:4px;font-size:9px;color:#9aa3b2;text-align:right}`,
+    `#zc-attendance-panel .tb-adjust{flex:0 0 52px;display:flex;justify-content:flex-end;align-items:center;padding-left:4px}`,
+    `#zc-attendance-panel .tb-adjust input{width:46px;box-sizing:border-box;font-size:10px;padding:0 3px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-adjust input.dirty{border-color:#e8890c;color:#c07b1c}`,
     `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
     `#zc-attendance-panel .tb-row.weekend .tb-bar{background:#8f74d8}`,
     `#zc-attendance-panel .tb-row.incomplete .tb-label{color:#a5adb8}`,
@@ -207,6 +215,63 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   btnRow.append(saveBtn, clearBtn);
   configBox.appendChild(btnRow);
 
+  const formBox = document.createElement("div");
+  formBox.style.cssText =
+    "border-top:1px solid #eef1f6;margin-top:8px;padding-top:6px;display:flex;flex-direction:column;gap:4px";
+  const formTitle = document.createElement("div");
+  formTitle.className = "stat-label";
+  formTitle.textContent = "加班申请单（改动即时保存）";
+  formBox.appendChild(formTitle);
+
+  const mkFormInput = (label: string, value: string): HTMLInputElement => {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value;
+    input.style.cssText = "font-size:11px;padding:2px 4px;width:400px";
+    formBox.appendChild(mkRow(label, input));
+    return input;
+  };
+
+  const fileNameIn = mkFormInput("文件名", formConfig.fileName);
+  const applicantIn = mkFormInput("申请人", formConfig.applicant);
+  const deptIn = mkFormInput("所属部门", formConfig.dept);
+  const projectIn = mkFormInput("所属项目", formConfig.project);
+  const reasonIn = mkFormInput("加班原因", formConfig.reason);
+
+  const collectForm = (): FormConfig => ({
+    fileName: fileNameIn.value.trim(),
+    applicant: applicantIn.value.trim(),
+    dept: deptIn.value.trim(),
+    project: projectIn.value.trim(),
+    reason: reasonIn.value.trim(),
+  });
+  const saveForm = () => actions.onSaveForm(collectForm());
+
+  // 文件名默认按月份生成：首次加载沿用已存的名字，切月份或改申请人时重新生成，其余改动不覆盖手填的名字
+  let nameMonth: string | null = null;
+  const applyAutoName = (monthKey: string | null, force: boolean) => {
+    if (!monthKey) return;
+    const first = nameMonth === null;
+    if (!first && !force && nameMonth === monthKey) return;
+    nameMonth = monthKey;
+    if (first && !force && fileNameIn.value !== "") return;
+    const auto = autoFileName(monthKey, applicantIn.value.trim());
+    if (fileNameIn.value !== auto) {
+      fileNameIn.value = auto;
+      saveForm();
+    }
+  };
+
+  for (const input of [fileNameIn, deptIn, projectIn, reasonIn]) {
+    input.onchange = () => saveForm();
+  }
+  applicantIn.onchange = () => {
+    saveForm();
+    applyAutoName(selectedKey, true);
+  };
+
+  configBox.appendChild(formBox);
+
   const toggleBtn = document.createElement("button");
   toggleBtn.textContent = "设置";
   toggleBtn.className = "btn";
@@ -301,6 +366,17 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   exportMonthBtn.textContent = "导出当月";
   exportMonthBtn.className = "btn";
   exportMonthBtn.onclick = () => actions.onExport(currentRecords, selectedKey);
+  const exportFormBtn = document.createElement("button");
+  exportFormBtn.type = "button";
+  exportFormBtn.textContent = "导出申请表";
+  exportFormBtn.className = "btn";
+  exportFormBtn.onclick = () => {
+    if (!selectedKey) {
+      showStatus("没有可导出的月份", "err");
+      return;
+    }
+    actions.onExportForm(selectedKey, collectForm());
+  };
   const ledgerBox = document.createElement("div");
 
   const startDateIn = document.createElement("input");
@@ -439,7 +515,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   const toolRow = document.createElement("div");
   toolRow.style.cssText = "display:flex;align-items:center;gap:4px";
-  toolRow.append(fetchBtn, backfillBtn, exportAllBtn, exportMonthBtn, toggleBtn);
+  toolRow.append(fetchBtn, backfillBtn, exportAllBtn, exportMonthBtn, exportFormBtn, toggleBtn);
   monthRow.append(monthNav, toolRow);
   statsView.appendChild(monthRow);
   statsView.appendChild(configBox);
@@ -507,7 +583,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
-  let adjustments: Record<string, number> = {};
+  let dayAdjust: Record<string, number> = {};
   let reportedMonths: string[] = [];
   let attached = false;
 
@@ -567,6 +643,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     head.appendChild(scale);
     head.appendChild(document.createElement("div")).className = "tb-clockout";
     head.appendChild(document.createElement("div")).className = "tb-meta";
+    const headAdjust = document.createElement("div");
+    headAdjust.className = "tb-adjust";
+    headAdjust.textContent = "修正";
+    head.appendChild(headAdjust);
     box.appendChild(head);
 
     const today = new Date();
@@ -624,10 +704,34 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
         meta.appendChild(w);
         const ov = document.createElement("span");
         ov.className = "ov";
-        if (d.overtimeMinutes > 0) ov.textContent = `+${fmtDuration(d.overtimeMinutes)}`;
+        if (d.overtimeMinutes !== 0) {
+          ov.textContent = d.overtimeMinutes > 0 ? `+${fmtDuration(d.overtimeMinutes)}` : fmtDuration(d.overtimeMinutes);
+        }
         meta.appendChild(ov);
       }
-      row.append(label, clockIn, track, clockOut, meta);
+      const adjustCell = document.createElement("div");
+      adjustCell.className = "tb-adjust";
+      const adjustIn = document.createElement("input");
+      adjustIn.type = "number";
+      adjustIn.step = "1";
+      const current = dayAdjust[d.date] ?? 0;
+      adjustIn.value = current === 0 ? "" : String(current);
+      adjustIn.placeholder = "0";
+      if (current !== 0) adjustIn.classList.add("dirty");
+      adjustIn.title = "当天加班的手工修正，单位分钟，可为负；留空或填 0 表示不修正";
+      adjustIn.onchange = () => {
+        const raw = adjustIn.value.trim();
+        const minutes = raw === "" ? 0 : Number(raw);
+        const res = actions.onSaveDayAdjust(d.date, minutes);
+        if (res.ok) {
+          showStatus("已保存 ✓", "ok");
+        } else {
+          showStatus("修正保存失败: " + res.error, "err");
+          adjustIn.value = current === 0 ? "" : String(current);
+        }
+      };
+      adjustCell.appendChild(adjustIn);
+      row.append(label, clockIn, track, clockOut, meta, adjustCell);
       box.appendChild(row);
     }
     return box;
@@ -657,12 +761,12 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     ledger: Ledger,
-    monthAdjust: Record<string, number>,
+    dayAdjustInput: Record<string, number>,
     reported: string[],
     busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
-    adjustments = monthAdjust;
+    dayAdjust = dayAdjustInput;
     reportedMonths = reported;
     ensureAttached();
     if (!attached) return;
@@ -731,35 +835,13 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       repIn.title = "勾选后该月加班才计入请假台账的可抵扣时间";
       repIn.onchange = () => actions.onToggleReported(g.key, repIn.checked);
       repLabel.append(repIn, document.createTextNode("已上报"));
-      const adjLabel = document.createElement("span");
-      adjLabel.style.cssText = "font-weight:400;color:#5a6478";
-      adjLabel.textContent = "修正";
-      const adjIn = document.createElement("input");
-      adjIn.type = "number";
-      adjIn.step = "1";
-      adjIn.style.width = "70px";
-      adjIn.value = String(adjustments[g.key] ?? 0);
-      adjIn.title = "该月加班总额的手工修正，单位分钟，可为负；填 0 表示不修正";
-      adjIn.onchange = () => {
-        const raw = adjIn.value.trim();
-        const minutes = raw === "" ? 0 : Number(raw);
-        const res = actions.onSaveMonthAdjust(g.key, minutes);
-        if (res.ok) {
-          showStatus("已保存 ✓", "ok");
-        } else {
-          showStatus("修正保存失败: " + res.error, "err");
-          adjIn.value = String(adjustments[g.key] ?? 0);
-        }
-      };
-      const adjUnit = document.createElement("span");
-      adjUnit.style.cssText = "font-weight:400;color:#5a6478";
-      adjUnit.textContent = "分钟";
-      head.append(headText, repLabel, adjLabel, adjIn, adjUnit);
+      head.append(headText, repLabel);
       content.appendChild(head);
       content.appendChild(renderMonthTable(g.summary.days));
       for (const btn of Array.from(side.querySelectorAll<HTMLButtonElement>(".month-btn"))) {
         btn.classList.toggle("active", btn.dataset.key === selected);
       }
+      applyAutoName(selected, false);
     };
 
     for (const group of months) {

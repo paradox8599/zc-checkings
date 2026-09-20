@@ -14,6 +14,7 @@ const options = {
   platform: "browser",
   target: "es2022",
   legalComments: "none",
+  loader: { ".xlsx": "binary" },
   define: {
     GM_setValue: "__zcSet",
     GM_getValue: "__zcGet",
