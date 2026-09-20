@@ -1,22 +1,17 @@
 import { fetchMonthAttendances, type AttendanceRecord } from "./api";
-import { summarizeByMonth, type WorkConfig } from "./calc";
-import { buildLedger, type LeaveEntry } from "./ledger";
+import { summarizeByMonth, type Summary, type WorkConfig } from "./calc";
+import { buildLedger, type LeaveEntry, type OvertimeDay } from "./ledger";
 import { createPanel } from "./panel";
 
 const RECORDS_KEY = "zc-attendance-records";
 const WORK_KEY = "zc-attendance-work";
 const LEAVES_KEY = "zc-leave-records";
 const LEAVE_START_KEY = "zc-leave-start";
+const MONTH_ADJUST_KEY = "zc-month-adjust";
 const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
-  standardStart: "08:30",
-  standardEnd: "17:30",
-  overtimeBufferMinutes: 30,
-  overtimeFrom: "8hours",
   lunchBreakMinutes: 60,
-  weekendLunchBreak: false,
-  minOvertimeMinutes: 60,
 };
 
 function loadWork(): WorkConfig {
@@ -91,10 +86,30 @@ function loadLeaveStart(): string {
   }
 }
 
+/** 每月加班的手工修正（分钟，可为负），key 为 YYYY-MM */
+function loadMonthAdjust(): Record<string, number> {
+  const out: Record<string, number> = {};
+  try {
+    const stored = GM_getValue(MONTH_ADJUST_KEY, "");
+    if (!stored) return out;
+    const obj = JSON.parse(stored);
+    if (!obj || typeof obj !== "object") return out;
+    for (const [key, value] of Object.entries(obj)) {
+      if (/^\d{4}-\d{2}$/.test(key) && typeof value === "number" && Number.isFinite(value) && value !== 0) {
+        out[key] = value;
+      }
+    }
+  } catch {
+    /* 忽略损坏数据 */
+  }
+  return out;
+}
+
 let work: WorkConfig = loadWork();
 const records = loadRecords();
 let leaves: LeaveEntry[] = loadLeaves();
 let leaveStart = loadLeaveStart();
+let monthAdjust = loadMonthAdjust();
 let apiFetching = false;
 let backfilling = false;
 let fetchingMonth = "";
@@ -102,17 +117,7 @@ let fetchingMonth = "";
 const panel = createPanel(work, {
   onSaveWork(next: WorkConfig) {
     try {
-      if (
-        typeof next !== "object" ||
-        next === null ||
-        typeof next.standardStart !== "string" ||
-        typeof next.standardEnd !== "string" ||
-        !Number.isFinite(next.overtimeBufferMinutes) ||
-        !Number.isFinite(next.lunchBreakMinutes) ||
-        typeof next.weekendLunchBreak !== "boolean" ||
-        !Number.isFinite(next.minOvertimeMinutes) ||
-        (next.overtimeFrom !== "threshold" && next.overtimeFrom !== "standard" && next.overtimeFrom !== "8hours")
-      ) {
+      if (typeof next !== "object" || next === null || !Number.isFinite(next.lunchBreakMinutes)) {
         throw new Error("配置格式不合法");
       }
       work = { ...DEFAULT_WORK, ...next };
@@ -186,6 +191,19 @@ const panel = createPanel(work, {
     GM_setValue(LEAVE_START_KEY, date);
     recompute();
   },
+  onSaveMonthAdjust(month: string, minutes: number) {
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return { ok: false, error: "月份格式不合法" };
+    }
+    if (!Number.isInteger(minutes)) {
+      return { ok: false, error: "修正值要填整数分钟" };
+    }
+    if (minutes === 0) delete monthAdjust[month];
+    else monthAdjust[month] = minutes;
+    persistMonthAdjust();
+    recompute();
+    return { ok: true };
+  },
   onClear() {
     records.clear();
     persist();
@@ -197,6 +215,10 @@ function persistLeaves(): void {
   GM_setValue(LEAVES_KEY, JSON.stringify(leaves));
 }
 
+function persistMonthAdjust(): void {
+  GM_setValue(MONTH_ADJUST_KEY, JSON.stringify(monthAdjust));
+}
+
 function persist(): void {
   GM_setValue(
     RECORDS_KEY,
@@ -206,15 +228,30 @@ function persist(): void {
   );
 }
 
+function withAdjust(summary: Summary, delta: number): Summary {
+  return delta === 0 ? summary : { ...summary, totalOvertimeMinutes: summary.totalOvertimeMinutes + delta };
+}
+
 function recompute(): void {
   const all = [...records.values()];
   const { total, months } = summarizeByMonth(all, work);
-  const overtimeDays = total.days.map((d) => ({ date: d.date, minutes: d.overtimeMinutes }));
+
+  // 修正值只对「有打卡数据的月份」生效，这样「加班统计」的合计数与台账抵扣池始终一致
+  const overtimeDays: OvertimeDay[] = total.days.map((d) => ({ date: d.date, minutes: d.overtimeMinutes }));
+  let totalAdjust = 0;
+  const adjustedMonths = months.map((m) => {
+    const minutes = monthAdjust[m.key] ?? 0;
+    if (minutes === 0) return m;
+    totalAdjust += minutes;
+    overtimeDays.push({ date: m.key, minutes, label: m.label });
+    return { ...m, summary: withAdjust(m.summary, minutes) };
+  });
+
   const ledger = buildLedger(overtimeDays, leaves, leaveStart);
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;
-  panel.update(total, months, all, ledger, busy);
+  panel.update(withAdjust(total, totalAdjust), adjustedMonths, all, ledger, monthAdjust, busy);
 }
 
 function mergeRecords(parsed: AttendanceRecord[]): boolean {

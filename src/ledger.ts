@@ -9,20 +9,27 @@ export interface LeaveEntry {
 }
 
 export interface OvertimeDay {
+  /** 排序键：真实加班日为 YYYY-MM-DD，整月修正为 YYYY-MM */
   date: string;
   minutes: number;
+  /** 整月修正的显示名（如「2026年8月」）；为空表示这是某天的加班 */
+  label?: string;
 }
 
 export interface LedgerDay {
   date: string;
+  label?: string;
   minutes: number;
   consumed: number;
+  writtenOff: number;
   remaining: number;
 }
 
 export interface LeavePart {
   date: string;
+  label?: string;
   minutes: number;
+  writtenOff: number;
   consumedBefore: number;
   remainingAfter: number;
 }
@@ -39,6 +46,7 @@ export interface LeaveBreakdown {
 export interface Ledger {
   startDate: string;
   days: LedgerDay[];
+  writeOffs: OvertimeDay[];
   breakdowns: LeaveBreakdown[];
   totalOvertime: number;
   totalLeave: number;
@@ -50,13 +58,40 @@ export function leaveMinutes(leave: LeaveEntry): number {
 }
 
 export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], startDate = ""): Ledger {
-  const days: LedgerDay[] = overtimeDays
-    .filter((d) => d.minutes > 0 && (!startDate || d.date >= startDate))
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((d) => ({ date: d.date, minutes: d.minutes, consumed: 0, remaining: d.minutes }));
+  // 整月修正只精确到月，起算日期按月比较；真实加班日按日比较
+  const inRange = (d: OvertimeDay) =>
+    !startDate || (d.label ? d.date >= startDate.slice(0, 7) : d.date >= startDate);
+
+  // 整月修正排在该月所有加班日之后：它是对整月的兜底修正，不对应某一天
+  const orderKey = (d: OvertimeDay) => (d.label ? `${d.date}\uffff` : d.date);
+
+  const items = overtimeDays
+    .filter((d) => d.minutes !== 0 && inRange(d))
+    .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
+
+  const days: LedgerDay[] = items
+    .filter((d) => d.minutes > 0)
+    .map((d) => ({ date: d.date, label: d.label, minutes: d.minutes, consumed: 0, writtenOff: 0, remaining: d.minutes }));
+
+  // 负数修正不是抵扣，而是「这些加班本来就不存在」：从该月起冲减最早的可抵扣加班
+  const writeOffs = items.filter((d) => d.minutes < 0);
+  let writeCursor = 0;
+  for (const adj of writeOffs) {
+    const month = adj.date.slice(0, 7);
+    while (writeCursor < days.length && days[writeCursor].date.slice(0, 7) < month) writeCursor++;
+    let write = -adj.minutes;
+    while (write > 0 && writeCursor < days.length) {
+      const day = days[writeCursor];
+      const take = Math.min(day.remaining, write);
+      day.writtenOff += take;
+      day.remaining -= take;
+      write -= take;
+      if (day.remaining === 0) writeCursor++;
+    }
+  }
 
   const ordered = [...leaves].sort((a, b) => a.date.localeCompare(b.date));
-  const totalOvertime = days.reduce((sum, d) => sum + d.minutes, 0);
+  const totalOvertime = items.reduce((sum, d) => sum + d.minutes, 0);
 
   let cursor = 0;
   let balance = totalOvertime;
@@ -74,7 +109,9 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
       if (take > 0) {
         parts.push({
           date: day.date,
+          label: day.label,
           minutes: take,
+          writtenOff: day.writtenOff,
           consumedBefore: day.consumed,
           remainingAfter: day.remaining - take,
         });
@@ -92,6 +129,7 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
   return {
     startDate,
     days,
+    writeOffs,
     breakdowns,
     totalOvertime,
     totalLeave: ordered.reduce((sum, l) => sum + leaveMinutes(l), 0),
@@ -140,13 +178,19 @@ export function renderDeclaration(ledger: Ledger, leaveId: string): string {
     bd.parts.forEach((p, i) => {
       const day = ledger.days.find((d) => d.date === p.date);
       const overtime = day ? day.minutes : 0;
-      const tail = i === bd.parts.length - 1 ? "。" : "；";
+      const what = p.label
+        ? `${p.label}修正加班 ${fmtHM(overtime)}`
+        : `${fmtDate(p.date)}（${weekdayLabel(p.date)}）加班 ${fmtHM(overtime)}`;
+      const offset = p.writtenOff > 0 ? `（其中 ${fmtHM(p.writtenOff)}已按修正扣除）` : "";
+      const tail = i === bd.parts.length - 1 && ledger.writeOffs.length === 0 ? "。" : "；";
       lines.push(
-        `- ${fmtDate(p.date)}（${weekdayLabel(p.date)}）加班 ${fmtHM(overtime)}，` +
-          `此前已抵扣 ${fmtHM(p.consumedBefore)}，本次抵扣 ${fmtHM(p.minutes)}，` +
+        `- ${what}${offset}，此前已抵扣 ${fmtHM(p.consumedBefore)}，本次抵扣 ${fmtHM(p.minutes)}，` +
           `该笔剩余 ${fmtHM(p.remainingAfter)}${tail}`,
       );
     });
+    for (const w of ledger.writeOffs) {
+      lines.push(`- ${w.label ?? w.date}修正 ${fmtHM(w.minutes)}，该笔不计入抵扣。`);
+    }
   }
 
   const uncoveredNote = bd.uncovered > 0 ? `，其中 ${fmtHM(bd.uncovered)}无加班可抵扣` : "";

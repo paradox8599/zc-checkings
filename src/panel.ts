@@ -12,6 +12,7 @@ export interface PanelActions {
   onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
   onDeleteLeave(id: string): void;
   onSaveLeaveStart(date: string): void;
+  onSaveMonthAdjust(month: string, minutes: number): { ok: boolean; error?: string };
   onClear(): void;
 }
 
@@ -21,6 +22,7 @@ export interface Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     ledger: Ledger,
+    adjustments: Record<string, number>,
     busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
@@ -170,57 +172,14 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     return row;
   };
 
-  const startIn = document.createElement("input");
-  startIn.type = "time";
-  startIn.value = work.standardStart;
-
-  const endIn = document.createElement("input");
-  endIn.type = "time";
-  endIn.value = work.standardEnd;
   const lunchIn = document.createElement("input");
   lunchIn.type = "number";
   lunchIn.min = "0";
   lunchIn.step = "5";
   lunchIn.value = String(work.lunchBreakMinutes);
   lunchIn.style.width = "70px";
-  const bufferIn = document.createElement("input");
-  bufferIn.type = "number";
-  bufferIn.min = "0";
-  bufferIn.step = "5";
-  bufferIn.value = String(work.overtimeBufferMinutes);
-  bufferIn.style.width = "70px";
-  const minOtIn = document.createElement("input");
-  minOtIn.type = "number";
-  minOtIn.min = "0";
-  minOtIn.step = "1";
-  minOtIn.value = String(work.minOvertimeMinutes);
-  minOtIn.style.width = "70px";
-  const fromSel = document.createElement("select");
-  const optThreshold = document.createElement("option");
-  optThreshold.value = "threshold";
-  optThreshold.textContent = "下班超过标准+宽限才计加班";
-  const optStandard = document.createElement("option");
-  optStandard.value = "standard";
-  optStandard.textContent = "下班超过标准时间就计加班";
-  const opt8Hours = document.createElement("option");
-  opt8Hours.value = "8hours";
-  opt8Hours.textContent = "工作日超8小时就计加班";
-  fromSel.append(optThreshold, optStandard, opt8Hours);
-  fromSel.value = work.overtimeFrom;
 
-  const weekendLunchChk = document.createElement("input");
-  weekendLunchChk.type = "checkbox";
-  weekendLunchChk.checked = work.weekendLunchBreak;
-
-  form.append(
-    mkRow("上班时间", startIn),
-    mkRow("下班时间", endIn),
-    mkRow("午休(分钟)", lunchIn),
-    mkRow("下班(分钟)内不算加班", bufferIn),
-    mkRow("少于(分钟)不算加班", minOtIn),
-    mkRow("加班计算", fromSel),
-    mkRow("周末扣午休", weekendLunchChk),
-  );
+  form.append(mkRow("午休(分钟)", lunchIn));
   configBox.appendChild(form);
 
   const btnRow = document.createElement("div");
@@ -229,13 +188,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   saveBtn.className = "btn";
   saveBtn.onclick = () => {
     const next: WorkConfig = {
-      standardStart: startIn.value,
-      standardEnd: endIn.value,
       lunchBreakMinutes: Number(lunchIn.value),
-      overtimeBufferMinutes: Number(bufferIn.value),
-      minOvertimeMinutes: Number(minOtIn.value),
-      overtimeFrom: fromSel.value as WorkConfig["overtimeFrom"],
-      weekendLunchBreak: weekendLunchChk.checked,
     };
     const res = actions.onSaveWork(next);
     if (!res.ok) {
@@ -253,7 +206,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   configBox.appendChild(btnRow);
 
   const toggleBtn = document.createElement("button");
-  toggleBtn.textContent = "工作时段配置";
+  toggleBtn.textContent = "设置";
   toggleBtn.className = "btn";
   toggleBtn.onclick = () => {
     configBox.style.display = configBox.style.display === "none" ? "" : "none";
@@ -550,6 +503,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
+  let adjustments: Record<string, number> = {};
   let attached = false;
 
   function ensureAttached() {
@@ -698,9 +652,11 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     months: MonthGroup[],
     records: AttendanceRecord[],
     ledger: Ledger,
+    monthAdjust: Record<string, number>,
     busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
+    adjustments = monthAdjust;
     ensureAttached();
     if (!attached) return;
     renderLedger(ledger);
@@ -753,9 +709,35 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       monthStatEl.appendChild(label);
       monthStatEl.appendChild(renderStats(g.summary));
       const head = document.createElement("div");
-      head.style.cssText = "font-weight:600;margin-bottom:4px;color:#3a5a9c";
-      head.textContent =
+      head.style.cssText =
+        "font-weight:600;margin-bottom:4px;color:#3a5a9c;display:flex;align-items:center;gap:6px";
+      const headText = document.createElement("span");
+      headText.textContent =
         `${g.label}  出勤${g.summary.workedDays}天  加班${fmtDuration(g.summary.totalOvertimeMinutes)}`;
+      const adjLabel = document.createElement("span");
+      adjLabel.style.cssText = "font-weight:400;color:#5a6478";
+      adjLabel.textContent = "修正";
+      const adjIn = document.createElement("input");
+      adjIn.type = "number";
+      adjIn.step = "1";
+      adjIn.style.width = "70px";
+      adjIn.value = String(adjustments[g.key] ?? 0);
+      adjIn.title = "该月加班总额的手工修正，单位分钟，可为负；填 0 表示不修正";
+      adjIn.onchange = () => {
+        const raw = adjIn.value.trim();
+        const minutes = raw === "" ? 0 : Number(raw);
+        const res = actions.onSaveMonthAdjust(g.key, minutes);
+        if (res.ok) {
+          showStatus("已保存 ✓", "ok");
+        } else {
+          showStatus("修正保存失败: " + res.error, "err");
+          adjIn.value = String(adjustments[g.key] ?? 0);
+        }
+      };
+      const adjUnit = document.createElement("span");
+      adjUnit.style.cssText = "font-weight:400;color:#5a6478";
+      adjUnit.textContent = "分钟";
+      head.append(headText, adjLabel, adjIn, adjUnit);
       content.appendChild(head);
       content.appendChild(renderMonthTable(g.summary.days));
       for (const btn of Array.from(side.querySelectorAll<HTMLButtonElement>(".month-btn"))) {

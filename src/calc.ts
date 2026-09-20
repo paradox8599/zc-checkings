@@ -1,14 +1,11 @@
 export interface WorkConfig {
-  standardStart: string;
-  standardEnd: string;
-  overtimeBufferMinutes: number;
-  overtimeFrom: "threshold" | "standard" | "8hours";
   lunchBreakMinutes: number;
-  weekendLunchBreak: boolean;
-  minOvertimeMinutes: number;
 }
 
 export const WORKDAY_HOURS = 8;
+
+/** 加班不足该分钟数时整天不计 */
+const MIN_OVERTIME_MINUTES = 60;
 
 export function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -54,42 +51,28 @@ export function computeDay(
   const incomplete = !rec.clockIn || !rec.clockOut;
   const wd = weekdayOf(rec.date);
   const isWeekend = wd === 0 || wd === 6;
-  const deductLunch = !isWeekend || work.weekendLunchBreak;
 
   let workedMinutes = 0;
   if (rec.clockIn && rec.clockOut) {
-    const inT = timeToMinutes(rec.clockIn);
-    const outT = timeToMinutes(rec.clockOut);
-    const span = Math.max(outT - inT, 0);
-    workedMinutes = deductLunch ? Math.max(span - work.lunchBreakMinutes, 0) : span;
+    const span = Math.max(timeToMinutes(rec.clockOut) - timeToMinutes(rec.clockIn), 0);
+    workedMinutes = Math.max(span - work.lunchBreakMinutes, 0);
   }
 
   let overtimeMinutes = 0;
   let otStartMinutes: number | null = null;
-  if (isWeekend) {
-    if (rec.clockIn && rec.clockOut) {
+  if (rec.clockIn && rec.clockOut) {
+    if (isWeekend) {
       overtimeMinutes = Math.min(workedMinutes, WORKDAY_HOURS * 60);
       otStartMinutes = timeToMinutes(rec.clockIn);
-    }
-  } else if (work.overtimeFrom === "8hours") {
-    if (workedMinutes > WORKDAY_HOURS * 60) {
+    } else if (workedMinutes > WORKDAY_HOURS * 60) {
       overtimeMinutes = workedMinutes - WORKDAY_HOURS * 60;
-      if (rec.clockOut) otStartMinutes = timeToMinutes(rec.clockOut) - overtimeMinutes;
-    }
-  } else if (rec.clockOut) {
-    const out = timeToMinutes(rec.clockOut);
-    const end = timeToMinutes(work.standardEnd);
-    const threshold = end + work.overtimeBufferMinutes;
-    if (out > threshold) {
-      const start = work.overtimeFrom === "threshold" ? threshold : end;
-      overtimeMinutes = out - start;
-      otStartMinutes = start;
+      otStartMinutes = timeToMinutes(rec.clockOut) - overtimeMinutes;
     }
   }
   if (otStartMinutes !== null && rec.clockIn) {
     otStartMinutes = Math.max(otStartMinutes, timeToMinutes(rec.clockIn));
   }
-  if (overtimeMinutes < work.minOvertimeMinutes) {
+  if (overtimeMinutes < MIN_OVERTIME_MINUTES) {
     overtimeMinutes = 0;
     otStartMinutes = null;
   }
