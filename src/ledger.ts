@@ -165,8 +165,6 @@ export function renderDeclaration(ledger: Ledger, leaveId: string): string {
   const { leave } = bd;
 
   const lines = [
-    "加班抵扣说明",
-    "",
     `本次请假 ${fmtHM(bd.minutes)}（${fmtDate(leave.date)} ${leave.start}–${leave.end}，事由：${leave.reason}），以加班时数抵扣。`,
     "",
     "抵扣加班：",
