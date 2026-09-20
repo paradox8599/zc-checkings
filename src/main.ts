@@ -1,9 +1,11 @@
 import { fetchMonthAttendances, type AttendanceRecord } from "./api";
 import { summarizeByMonth, type WorkConfig } from "./calc";
+import { buildLedger, type LeaveEntry } from "./ledger";
 import { createPanel } from "./panel";
 
 const RECORDS_KEY = "zc-attendance-records";
 const WORK_KEY = "zc-attendance-work";
+const LEAVES_KEY = "zc-leave-records";
 
 const DEFAULT_WORK: WorkConfig = {
   standardStart: "08:30",
@@ -47,8 +49,40 @@ function loadRecords(): Map<string, AttendanceRecord> {
   return map;
 }
 
+function loadLeaves(): LeaveEntry[] {
+  const list: LeaveEntry[] = [];
+  try {
+    const stored = GM_getValue(LEAVES_KEY, "");
+    if (!stored) return list;
+    const arr = JSON.parse(stored);
+    if (!Array.isArray(arr)) return list;
+    for (const l of arr) {
+      if (
+        l &&
+        typeof l.id === "string" &&
+        typeof l.date === "string" &&
+        typeof l.start === "string" &&
+        typeof l.end === "string" &&
+        typeof l.reason === "string"
+      ) {
+        list.push({ id: l.id, date: l.date, start: l.start, end: l.end, reason: l.reason });
+      }
+    }
+  } catch {
+    /* 忽略损坏数据 */
+  }
+  return list;
+}
+
+function newLeaveId(): string {
+  const c: Crypto | undefined = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 let work: WorkConfig = loadWork();
 const records = loadRecords();
+let leaves: LeaveEntry[] = loadLeaves();
 let apiFetching = false;
 let backfilling = false;
 let fetchingMonth = "";
@@ -116,12 +150,35 @@ const panel = createPanel(work, {
     a.click();
     URL.revokeObjectURL(a.href);
   },
+  onAddLeave(input) {
+    const { date, start, end } = input;
+    const reason = input.reason.trim();
+    if (!date || !start || !end || !reason) {
+      return { ok: false, error: "日期、开始/结束时间、事由都要填" };
+    }
+    if (end <= start) {
+      return { ok: false, error: "结束时间要晚于开始时间" };
+    }
+    leaves.push({ id: newLeaveId(), date, start, end, reason });
+    persistLeaves();
+    recompute();
+    return { ok: true };
+  },
+  onDeleteLeave(id: string) {
+    leaves = leaves.filter((l) => l.id !== id);
+    persistLeaves();
+    recompute();
+  },
   onClear() {
     records.clear();
     persist();
     recompute();
   },
 });
+
+function persistLeaves(): void {
+  GM_setValue(LEAVES_KEY, JSON.stringify(leaves));
+}
 
 function persist(): void {
   GM_setValue(
@@ -133,11 +190,14 @@ function persist(): void {
 }
 
 function recompute(): void {
-  const { total, months } = summarizeByMonth([...records.values()], work);
+  const all = [...records.values()];
+  const { total, months } = summarizeByMonth(all, work);
+  const overtimeDays = total.days.map((d) => ({ date: d.date, minutes: d.overtimeMinutes }));
+  const ledger = buildLedger(overtimeDays, leaves);
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;
-  panel.update(total, months, [...records.values()], busy);
+  panel.update(total, months, all, ledger, busy);
 }
 
 function mergeRecords(parsed: AttendanceRecord[]): boolean {

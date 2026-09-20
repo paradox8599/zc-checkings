@@ -1,12 +1,16 @@
 import type { WorkConfig, Summary, MonthGroup } from "./calc";
 import type { AttendanceRecord } from "./api";
+import type { Ledger, LeaveEntry } from "./ledger";
 import { fmtDuration } from "./calc";
+import { renderDeclaration } from "./ledger";
 
 export interface PanelActions {
   onSaveWork(work: WorkConfig): { ok: boolean; error?: string };
   onApiFetchMonth(month: string): void;
   onApiBackfill(fromMonth: string): void;
   onExport(records: AttendanceRecord[], monthKey?: string | null): void;
+  onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
+  onDeleteLeave(id: string): void;
   onClear(): void;
 }
 
@@ -15,6 +19,7 @@ export interface Panel {
     summary: Summary,
     months: MonthGroup[],
     records: AttendanceRecord[],
+    ledger: Ledger,
     busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
@@ -41,6 +46,9 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     `#zc-attendance-panel .zc-status.ok{color:#2e9e5b}`,
     `#zc-attendance-panel .zc-status.err{color:#d9534f}`,
     `#zc-attendance-panel .btn:disabled{opacity:.5;cursor:default}`,
+    `#zc-attendance-panel .tab-btn{padding:4px 14px;font-size:12px;cursor:pointer;background:none;color:#5a6478;border:1px solid transparent;border-bottom:none;border-radius:5px 5px 0 0;margin-bottom:-1px}`,
+    `#zc-attendance-panel .tab-btn:hover{background:#eef1f7}`,
+    `#zc-attendance-panel .tab-btn.active{background:#fff;border-color:#dfe3ec;color:#3a5a9c;font-weight:600}`,
     `#zc-attendance-panel .zc-content{padding:10px}`,
     `#zc-attendance-panel table{border-collapse:collapse;width:100%;font-size:11px}`,
     `#zc-attendance-panel th{background:#eef1f7;color:#3a5a9c;font-weight:600;border:1px solid #dfe3ec;padding:3px 4px;text-align:right;position:sticky;top:0}`,
@@ -115,6 +123,37 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   const contentWrap = document.createElement("div");
   contentWrap.className = "zc-content";
   root.appendChild(contentWrap);
+
+  const statsView = document.createElement("div");
+  const ledgerView = document.createElement("div");
+  ledgerView.style.display = "none";
+
+  const tabBar = document.createElement("div");
+  tabBar.style.cssText = "display:flex;gap:2px;border-bottom:1px solid #dfe3ec;margin:0 0 8px";
+  const tabStatsBtn = document.createElement("button");
+  tabStatsBtn.type = "button";
+  tabStatsBtn.textContent = "加班统计";
+  tabStatsBtn.className = "tab-btn";
+  const tabLedgerBtn = document.createElement("button");
+  tabLedgerBtn.type = "button";
+  tabLedgerBtn.textContent = "请假台账";
+  tabLedgerBtn.className = "tab-btn";
+  tabBar.append(tabStatsBtn, tabLedgerBtn);
+
+  const statusRow = document.createElement("div");
+  statusRow.style.cssText = "display:flex;align-items:center;gap:6px;min-height:16px;margin:0 0 6px";
+
+  const setTab = (which: "stats" | "ledger") => {
+    statsView.style.display = which === "stats" ? "" : "none";
+    ledgerView.style.display = which === "ledger" ? "" : "none";
+    tabStatsBtn.classList.toggle("active", which === "stats");
+    tabLedgerBtn.classList.toggle("active", which === "ledger");
+  };
+  tabStatsBtn.onclick = () => setTab("stats");
+  tabLedgerBtn.onclick = () => setTab("ledger");
+  setTab("stats");
+
+  contentWrap.append(tabBar, statusRow, statsView, ledgerView);
 
   const configBox = document.createElement("div");
 
@@ -260,6 +299,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   monthNav.append(yearSel, monthSel);
   const statusEl = document.createElement("div");
   statusEl.className = "zc-status";
+  statusRow.appendChild(statusEl);
   let statusTimer: number | null = null;
   const showStatus = (msg: string, kind: "busy" | "ok" | "err" = "busy") => {
     if (statusTimer !== null) window.clearTimeout(statusTimer);
@@ -305,9 +345,135 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   exportMonthBtn.textContent = "导出当月";
   exportMonthBtn.className = "btn";
   exportMonthBtn.onclick = () => actions.onExport(currentRecords, selectedKey);
-  monthRow.append(monthNav, fetchBtn, backfillBtn, statusEl, exportAllBtn, exportMonthBtn, toggleBtn);
-  contentWrap.appendChild(monthRow);
-  contentWrap.appendChild(configBox);
+  const ledgerBox = document.createElement("div");
+
+  const ledgerStats = document.createElement("div");
+  ledgerStats.className = "stat-line";
+  ledgerStats.style.marginBottom = "6px";
+
+  const leaveDateIn = document.createElement("input");
+  leaveDateIn.type = "date";
+  leaveDateIn.style.cssText = "font-size:11px;padding:1px 3px";
+  const leaveStartIn = document.createElement("input");
+  leaveStartIn.type = "time";
+  leaveStartIn.style.cssText = "font-size:11px;padding:1px 3px";
+  const leaveEndIn = document.createElement("input");
+  leaveEndIn.type = "time";
+  leaveEndIn.style.cssText = "font-size:11px;padding:1px 3px";
+  const leaveReasonIn = document.createElement("input");
+  leaveReasonIn.type = "text";
+  leaveReasonIn.placeholder = "事由";
+  leaveReasonIn.style.cssText = "font-size:11px;padding:2px 4px;width:140px";
+  const leaveAddBtn = document.createElement("button");
+  leaveAddBtn.type = "button";
+  leaveAddBtn.textContent = "添加请假";
+  leaveAddBtn.className = "btn";
+  leaveAddBtn.onclick = () => {
+    const res = actions.onAddLeave({
+      date: leaveDateIn.value,
+      start: leaveStartIn.value,
+      end: leaveEndIn.value,
+      reason: leaveReasonIn.value,
+    });
+    if (!res.ok) {
+      showStatus("添加失败: " + res.error, "err");
+      return;
+    }
+    leaveReasonIn.value = "";
+    showStatus("已添加请假 ✓", "ok");
+  };
+  const leaveForm = document.createElement("div");
+  leaveForm.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 6px";
+  leaveForm.append(leaveDateIn, leaveStartIn, leaveEndIn, leaveReasonIn, leaveAddBtn);
+
+  const leaveList = document.createElement("div");
+
+  const declText = document.createElement("textarea");
+  declText.readOnly = true;
+  declText.style.cssText =
+    "width:100%;height:132px;box-sizing:border-box;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#fbfcfe;border:1px solid #dfe3ec;border-radius:4px;padding:6px;white-space:pre";
+  const declCopyBtn = document.createElement("button");
+  declCopyBtn.type = "button";
+  declCopyBtn.textContent = "复制";
+  declCopyBtn.className = "btn";
+  declCopyBtn.onclick = () => {
+    declText.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    showStatus(ok ? "已复制 ✓" : "复制失败，请手动复制", ok ? "ok" : "err");
+  };
+  const declWrap = document.createElement("div");
+  declWrap.style.cssText = "display:none;margin-top:6px";
+  declWrap.append(declText, declCopyBtn);
+
+  const renderLedger = (ledger: Ledger): void => {
+    ledgerStats.innerHTML = "";
+    const chips: Array<[string, string, boolean]> = [
+      ["累计加班", fmtDuration(ledger.totalOvertime), false],
+      ["已抵扣", fmtDuration(ledger.totalLeave), false],
+      ["结余", fmtDuration(ledger.balance), ledger.balance < 0],
+    ];
+    for (const [k, v, bad] of chips) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.innerHTML = `${k} <b>${v}</b>`;
+      if (bad) {
+        chip.style.color = "#d9534f";
+        chip.style.borderColor = "#f0c4c2";
+        chip.style.background = "#fdf3f3";
+      }
+      ledgerStats.appendChild(chip);
+    }
+
+    leaveList.innerHTML = "";
+    if (ledger.breakdowns.length === 0) {
+      leaveList.style.cssText = "font-size:11px;color:#7a8499;padding:2px 0";
+      leaveList.textContent = "暂无请假记录。";
+      return;
+    }
+    leaveList.style.cssText = "";
+    for (const bd of [...ledger.breakdowns].reverse()) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:3px 0;border-top:1px solid #eef1f6";
+      const info = document.createElement("div");
+      info.style.cssText =
+        "flex:1;min-width:0;font-size:11px;color:#3a4356;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      info.textContent =
+        `${bd.leave.date} ${bd.leave.start}-${bd.leave.end}  ${fmtDuration(bd.minutes)}  ${bd.leave.reason}`;
+      const declBtn = document.createElement("button");
+      declBtn.type = "button";
+      declBtn.textContent = "声明";
+      declBtn.className = "btn";
+      declBtn.style.margin = "0";
+      declBtn.onclick = () => {
+        declText.value = renderDeclaration(ledger, bd.leave.id);
+        declWrap.style.display = "";
+        declText.select();
+      };
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "删除";
+      delBtn.className = "btn";
+      delBtn.style.margin = "0";
+      delBtn.onclick = () => actions.onDeleteLeave(bd.leave.id);
+      row.append(info, declBtn, delBtn);
+      leaveList.appendChild(row);
+    }
+  };
+
+  ledgerBox.append(ledgerStats, leaveForm, leaveList, declWrap);
+  ledgerView.appendChild(ledgerBox);
+
+  const toolRow = document.createElement("div");
+  toolRow.style.cssText = "display:flex;align-items:center;gap:4px";
+  toolRow.append(fetchBtn, backfillBtn, exportAllBtn, exportMonthBtn, toggleBtn);
+  monthRow.append(monthNav, toolRow);
+  statsView.appendChild(monthRow);
+  statsView.appendChild(configBox);
 
   const miniBtn = document.createElement("button");
   miniBtn.textContent = "加班统计";
@@ -365,10 +531,10 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
 
   const summaryEl = document.createElement("div");
   summaryEl.className = "stat";
-  contentWrap.appendChild(summaryEl);
+  statsView.appendChild(summaryEl);
 
   const body = document.createElement("div");
-  contentWrap.appendChild(body);
+  statsView.appendChild(body);
 
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
@@ -519,11 +685,13 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     summary: Summary,
     months: MonthGroup[],
     records: AttendanceRecord[],
+    ledger: Ledger,
     busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
     ensureAttached();
     if (!attached) return;
+    renderLedger(ledger);
 
     if (busy?.mode === "fetch") {
       showStatus(`正在获取 ${busy.month} …`);
