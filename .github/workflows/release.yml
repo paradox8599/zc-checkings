@@ -14,19 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v6
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npm run typecheck
+      - run: pnpm run typecheck
 
       - name: Build release
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
-        run: npm run release
+        run: pnpm run release
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2

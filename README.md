@@ -63,15 +63,17 @@ Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份�
 
 ## 构建
 
-- `npm run build`：开发版，输出 `dist/core.js` + `dist/attendance.user.js`（stub），用于本地调试
-- `npm run release`：发布版，输出 `dist/attendance.release.user.js`（27KB 自包含，core 内联、无本地服务依赖），**可直接拖入 Tampermonkey 安装**
+依赖用 pnpm 管理，先 `pnpm install`：
+
+- `pnpm run build`：开发版，输出 `dist/core.js` + `dist/attendance.user.js`（stub），用于本地调试
+- `pnpm run release`：发布版，输出 `dist/attendance.release.user.js`（27KB 自包含，core 内联、无本地服务依赖），**可直接拖入 Tampermonkey 安装**
 
 ## 本地调试工作流
 
 一键启动开发环境：
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 自动完成：构建（watch 模式，改动 `src/*.ts` 自动重建）→ 起本地服务（8877）→ 启动独立 Chrome（临时 profile，自动加载 Tampermonkey Beta 并安装 dev 版脚本）→ 打开考勤系统页面。
@@ -97,4 +99,4 @@ dist/            core.js（逻辑）+ attendance.user.js（stub）
 
 ## 依赖
 
-- 本地调试：`npm run dev` 会自动准备一切（Tampermonkey 下载、临时 Chrome profile，见 `.dev/`）。
+- 本地调试：`pnpm run dev` 会自动准备一切（Tampermonkey 下载、临时 Chrome profile，见 `.dev/`）。
