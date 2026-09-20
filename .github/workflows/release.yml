@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 版本号（形如 v0.14.0），同时用作 git tag 名与脚本 @version
+        required: true
 
 permissions:
   contents: write
@@ -27,11 +32,13 @@ jobs:
 
       - name: Build release
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
         run: pnpm run release
 
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.version || github.ref_name }}
+          target_commitish: ${{ github.sha }}
           files: dist/attendance.release.user.js
           generate_release_notes: true
