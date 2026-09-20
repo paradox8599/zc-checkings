@@ -38,6 +38,29 @@ Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份�
 
 配置保存在 localStorage（key `zc-attendance-work`）。「清空数据」按钮清空全部打卡记录。
 
+## 请假台账
+
+在加班统计之上叠加「请假抵扣」，算出当前加班结余，并能生成抵扣声明。
+
+**数据**
+
+- 加班：由插件实时算出 `{日期, 加班分钟}`，不落库
+- 请假记录：`{id, 日期, 开始时间, 结束时间, 事由}`，存 localStorage（key `zc-leave-records`）；时长由开始、结束时间相减得出，不单独填
+
+**抵扣规则**
+
+加班没有有效期。抵扣按下式现算，不落库：
+
+1. 加班按日期从早到晚排
+2. 请假也按日期从早到晚排
+3. 依次把每笔请假的时长，从最早那笔加班开始扣，一笔不够就顺延到下一笔
+4. 每笔加班的「此前已抵扣 / 本次抵扣 / 该笔剩余」，取的是这笔请假发生时的快照
+5. 结余 ＝ Σ加班 − Σ请假时长
+
+**声明**
+
+每笔请假可生成一段「加班抵扣说明」，直接贴进请假单的事由栏。
+
 ## 构建
 
 - `npm run build`：开发版，输出 `dist/core.js` + `dist/attendance.user.js`（stub），用于本地调试
@@ -65,6 +88,7 @@ Chrome 带 `--remote-debugging-port=9222`，AI 调试时用 `agent-browser --cdp
 src/main.ts      入口：初始化、面板、数据获取、持久化、合并去重
 src/api.ts       考勤 API 数据获取（fetchMonthAttendances）+ AttendanceRecord 类型
 src/calc.ts      工时/加班纯计算
+src/ledger.ts    请假抵扣台账：FIFO 抵扣 + 声明文本生成
 src/panel.ts     浮动面板 UI
 build.mjs        esbuild 打包（支持 --watch）+ 生成 stub
 dev.mjs          一键启动开发环境（build watch + 本地服务 + Chrome profile）
