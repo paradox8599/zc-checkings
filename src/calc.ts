@@ -51,21 +51,24 @@ export function computeDay(
   rec: { date: string; clockIn: string | null; clockOut: string | null },
   work: WorkConfig,
 ): DayStat {
+  const incomplete = !rec.clockIn || !rec.clockOut;
+  const wd = weekdayOf(rec.date);
+  const isWeekend = wd === 0 || wd === 6;
+  const deductLunch = !isWeekend || work.weekendLunchBreak;
+
   let workedMinutes = 0;
   if (rec.clockIn && rec.clockOut) {
     const inT = timeToMinutes(rec.clockIn);
     const outT = timeToMinutes(rec.clockOut);
-    workedMinutes = outT - inT - work.lunchBreakMinutes;
-    if (workedMinutes < 0) workedMinutes = 0;
+    const span = Math.max(outT - inT, 0);
+    workedMinutes = deductLunch ? Math.max(span - work.lunchBreakMinutes, 0) : span;
   }
-  const incomplete = !rec.clockIn || !rec.clockOut;
+
   let overtimeMinutes = 0;
   let otStartMinutes: number | null = null;
-  const wd = weekdayOf(rec.date);
-  if (wd === 0 || wd === 6) {
+  if (isWeekend) {
     if (rec.clockIn && rec.clockOut) {
-      if (!work.weekendLunchBreak) workedMinutes = workedMinutes + work.lunchBreakMinutes;
-      overtimeMinutes = Math.min(Math.max(workedMinutes, 0), WORKDAY_HOURS * 60);
+      overtimeMinutes = Math.min(workedMinutes, WORKDAY_HOURS * 60);
       otStartMinutes = timeToMinutes(rec.clockIn);
     }
   } else if (work.overtimeFrom === "8hours") {
