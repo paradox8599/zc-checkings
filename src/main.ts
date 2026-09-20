@@ -8,6 +8,7 @@ const WORK_KEY = "zc-attendance-work";
 const LEAVES_KEY = "zc-leave-records";
 const LEAVE_START_KEY = "zc-leave-start";
 const MONTH_ADJUST_KEY = "zc-month-adjust";
+const REPORTED_KEY = "zc-month-reported";
 const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
@@ -105,11 +106,25 @@ function loadMonthAdjust(): Record<string, number> {
   return out;
 }
 
+/** 已上报给公司的月份，key 为 YYYY-MM；只有已上报月份的加班才能用来抵扣请假 */
+function loadReportedMonths(): string[] {
+  try {
+    const stored = GM_getValue(REPORTED_KEY, "");
+    if (!stored) return [];
+    const arr = JSON.parse(stored);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((m): m is string => typeof m === "string" && /^\d{4}-\d{2}$/.test(m));
+  } catch {
+    return [];
+  }
+}
+
 let work: WorkConfig = loadWork();
 const records = loadRecords();
 let leaves: LeaveEntry[] = loadLeaves();
 let leaveStart = loadLeaveStart();
 let monthAdjust = loadMonthAdjust();
+let reportedMonths = loadReportedMonths();
 let apiFetching = false;
 let backfilling = false;
 let fetchingMonth = "";
@@ -204,6 +219,14 @@ const panel = createPanel(work, {
     recompute();
     return { ok: true };
   },
+  onToggleReported(month: string, reported: boolean) {
+    if (!/^\d{4}-\d{2}$/.test(month)) return;
+    reportedMonths = reported
+      ? [...new Set([...reportedMonths, month])]
+      : reportedMonths.filter((m) => m !== month);
+    persistReportedMonths();
+    recompute();
+  },
   onClear() {
     records.clear();
     persist();
@@ -217,6 +240,10 @@ function persistLeaves(): void {
 
 function persistMonthAdjust(): void {
   GM_setValue(MONTH_ADJUST_KEY, JSON.stringify(monthAdjust));
+}
+
+function persistReportedMonths(): void {
+  GM_setValue(REPORTED_KEY, JSON.stringify(reportedMonths));
 }
 
 function persist(): void {
@@ -237,13 +264,18 @@ function recompute(): void {
   const { total, months } = summarizeByMonth(all, work);
 
   // 修正值只对「有打卡数据的月份」生效，这样「加班统计」的合计数与台账抵扣池始终一致
-  const overtimeDays: OvertimeDay[] = total.days.map((d) => ({ date: d.date, minutes: d.overtimeMinutes }));
+  const reported = new Set(reportedMonths);
+  const overtimeDays: OvertimeDay[] = total.days.map((d) => ({
+    date: d.date,
+    minutes: d.overtimeMinutes,
+    reported: reported.has(d.date.slice(0, 7)),
+  }));
   let totalAdjust = 0;
   const adjustedMonths = months.map((m) => {
     const minutes = monthAdjust[m.key] ?? 0;
     if (minutes === 0) return m;
     totalAdjust += minutes;
-    overtimeDays.push({ date: m.key, minutes, label: m.label });
+    overtimeDays.push({ date: m.key, minutes, label: m.label, reported: reported.has(m.key) });
     return { ...m, summary: withAdjust(m.summary, minutes) };
   });
 
@@ -251,7 +283,7 @@ function recompute(): void {
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;
-  panel.update(withAdjust(total, totalAdjust), adjustedMonths, all, ledger, monthAdjust, busy);
+  panel.update(withAdjust(total, totalAdjust), adjustedMonths, all, ledger, monthAdjust, reportedMonths, busy);
 }
 
 function mergeRecords(parsed: AttendanceRecord[]): boolean {

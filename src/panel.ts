@@ -13,6 +13,7 @@ export interface PanelActions {
   onDeleteLeave(id: string): void;
   onSaveLeaveStart(date: string): void;
   onSaveMonthAdjust(month: string, minutes: number): { ok: boolean; error?: string };
+  onToggleReported(month: string, reported: boolean): void;
   onClear(): void;
 }
 
@@ -23,6 +24,7 @@ export interface Panel {
     records: AttendanceRecord[],
     ledger: Ledger,
     adjustments: Record<string, number>,
+    reported: string[],
     busy?: { mode: "fetch" | "backfill"; month: string } | null,
   ): void;
 }
@@ -378,7 +380,9 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     startDateIn.value = ledger.startDate;
     ledgerStats.innerHTML = "";
     const chips: Array<[string, string, boolean]> = [
-      ["累计加班", fmtDuration(ledger.totalOvertime), false],
+      ["累计加班", fmtDuration(ledger.totalOvertime + ledger.unreportedMinutes), false],
+      ["未上报", fmtDuration(ledger.unreportedMinutes), false],
+      ["已上报", fmtDuration(ledger.totalOvertime), false],
       ["已抵扣", fmtDuration(ledger.totalLeave), false],
       ["结余", fmtDuration(ledger.balance), ledger.balance < 0],
     ];
@@ -504,6 +508,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
   let currentRecords: AttendanceRecord[] = [];
   let selectedKey: string | null = null;
   let adjustments: Record<string, number> = {};
+  let reportedMonths: string[] = [];
   let attached = false;
 
   function ensureAttached() {
@@ -653,10 +658,12 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
     records: AttendanceRecord[],
     ledger: Ledger,
     monthAdjust: Record<string, number>,
+    reported: string[],
     busy: { mode: "fetch" | "backfill"; month: string } | null = null,
   ): void {
     currentRecords = records;
     adjustments = monthAdjust;
+    reportedMonths = reported;
     ensureAttached();
     if (!attached) return;
     renderLedger(ledger);
@@ -714,6 +721,16 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       const headText = document.createElement("span");
       headText.textContent =
         `${g.label}  出勤${g.summary.workedDays}天  加班${fmtDuration(g.summary.totalOvertimeMinutes)}`;
+      const repLabel = document.createElement("label");
+      repLabel.style.cssText =
+        "font-weight:400;color:#5a6478;display:flex;align-items:center;gap:3px;cursor:pointer";
+      const repIn = document.createElement("input");
+      repIn.type = "checkbox";
+      repIn.style.margin = "0";
+      repIn.checked = reportedMonths.includes(g.key);
+      repIn.title = "勾选后该月加班才计入请假台账的可抵扣时间";
+      repIn.onchange = () => actions.onToggleReported(g.key, repIn.checked);
+      repLabel.append(repIn, document.createTextNode("已上报"));
       const adjLabel = document.createElement("span");
       adjLabel.style.cssText = "font-weight:400;color:#5a6478";
       adjLabel.textContent = "修正";
@@ -737,7 +754,7 @@ export function createPanel(work: WorkConfig, actions: PanelActions): Panel {
       const adjUnit = document.createElement("span");
       adjUnit.style.cssText = "font-weight:400;color:#5a6478";
       adjUnit.textContent = "分钟";
-      head.append(headText, adjLabel, adjIn, adjUnit);
+      head.append(headText, repLabel, adjLabel, adjIn, adjUnit);
       content.appendChild(head);
       content.appendChild(renderMonthTable(g.summary.days));
       for (const btn of Array.from(side.querySelectorAll<HTMLButtonElement>(".month-btn"))) {

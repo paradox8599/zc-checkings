@@ -14,6 +14,8 @@ export interface OvertimeDay {
   minutes: number;
   /** 整月修正的显示名（如「2026年8月」）；为空表示这是某天的加班 */
   label?: string;
+  /** false 表示该月还没上报给公司，不计入可抵扣时间 */
+  reported?: boolean;
 }
 
 export interface LedgerDay {
@@ -48,7 +50,10 @@ export interface Ledger {
   days: LedgerDay[];
   writeOffs: OvertimeDay[];
   breakdowns: LeaveBreakdown[];
+  /** 可抵扣加班合计（已上报月份的加班与修正） */
   totalOvertime: number;
+  /** 未上报月份的加班合计，不计入可抵扣时间 */
+  unreportedMinutes: number;
   totalLeave: number;
   balance: number;
 }
@@ -66,7 +71,7 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
   const orderKey = (d: OvertimeDay) => (d.label ? `${d.date}\uffff` : d.date);
 
   const items = overtimeDays
-    .filter((d) => d.minutes !== 0 && inRange(d))
+    .filter((d) => d.reported !== false && d.minutes !== 0 && inRange(d))
     .sort((a, b) => orderKey(a).localeCompare(orderKey(b)));
 
   const days: LedgerDay[] = items
@@ -132,6 +137,9 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
     writeOffs,
     breakdowns,
     totalOvertime,
+    unreportedMinutes: overtimeDays
+      .filter((d) => d.reported === false && inRange(d))
+      .reduce((sum, d) => sum + d.minutes, 0),
     totalLeave: ordered.reduce((sum, l) => sum + leaveMinutes(l), 0),
     balance: totalOvertime - ordered.reduce((sum, l) => sum + leaveMinutes(l), 0),
   };
