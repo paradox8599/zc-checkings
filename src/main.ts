@@ -9,10 +9,10 @@ const DEFAULT_WORK: WorkConfig = {
   standardStart: "08:30",
   standardEnd: "17:30",
   overtimeBufferMinutes: 30,
-  overtimeFrom: "threshold",
-  lunchBreakMinutes: 0,
+  overtimeFrom: "8hours",
+  lunchBreakMinutes: 60,
   weekendLunchBreak: false,
-  minOvertimeMinutes: 0,
+  minOvertimeMinutes: 60,
 };
 
 function loadWork(): WorkConfig {

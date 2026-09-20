@@ -65,7 +65,7 @@ export function computeDay(
   if (wd === 0 || wd === 6) {
     if (rec.clockIn && rec.clockOut) {
       if (!work.weekendLunchBreak) workedMinutes = workedMinutes + work.lunchBreakMinutes;
-      overtimeMinutes = Math.max(workedMinutes, 0);
+      overtimeMinutes = Math.min(Math.max(workedMinutes, 0), WORKDAY_HOURS * 60);
       otStartMinutes = timeToMinutes(rec.clockIn);
     }
   } else if (work.overtimeFrom === "8hours") {
