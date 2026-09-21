@@ -65,7 +65,14 @@ function loadLeaves(): LeaveEntry[] {
         typeof l.end === "string" &&
         typeof l.reason === "string"
       ) {
-        list.push({ id: l.id, date: l.date, start: l.start, end: l.end, reason: l.reason });
+        list.push({
+          id: l.id,
+          appliedDate: typeof l.appliedDate === "string" ? l.appliedDate : "",
+          date: l.date,
+          start: l.start,
+          end: l.end,
+          reason: l.reason,
+        });
       }
     }
   } catch {
@@ -233,15 +240,26 @@ const panel = createPanel(work, form, {
     URL.revokeObjectURL(a.href);
   },
   onAddLeave(input) {
-    const { date, start, end } = input;
+    const { appliedDate, date, start, end } = input;
     const reason = input.reason.trim();
-    if (!date || !start || !end || !reason) {
-      return { ok: false, error: "日期、开始/结束时间、事由都要填" };
+    if (!appliedDate || !date || !start || !end || !reason) {
+      return { ok: false, error: "申请日期、请假日期、开始/结束时间、事由都要填" };
     }
     if (end <= start) {
       return { ok: false, error: "结束时间要晚于开始时间" };
     }
-    leaves.push({ id: newLeaveId(), date, start, end, reason });
+    leaves.push({ id: newLeaveId(), appliedDate, date, start, end, reason });
+    persistLeaves();
+    recompute();
+    return { ok: true };
+  },
+  onSetLeaveAppliedDate(id: string, appliedDate: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(appliedDate)) {
+      return { ok: false, error: "申请日期格式不合法" };
+    }
+    const leave = leaves.find((l) => l.id === id);
+    if (!leave) return { ok: false, error: "找不到这条请假" };
+    leave.appliedDate = appliedDate;
     persistLeaves();
     recompute();
     return { ok: true };

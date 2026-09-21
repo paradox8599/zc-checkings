@@ -14,6 +14,7 @@ export interface PanelActions {
   onSaveForm(form: FormConfig): { ok: boolean; error?: string };
   onExportForm(monthKey: string | null, form: FormConfig): void;
   onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
+  onSetLeaveAppliedDate(id: string, date: string): { ok: boolean; error?: string };
   onDeleteLeave(id: string): void;
   onSaveLeaveStart(date: string): void;
   onSaveDayAdjust(date: string, minutes: number): { ok: boolean; error?: string };
@@ -393,9 +394,19 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   ledgerStats.className = "stat-line";
   ledgerStats.style.marginBottom = "6px";
 
+  const leaveAppliedIn = document.createElement("input");
+  leaveAppliedIn.type = "date";
+  leaveAppliedIn.style.cssText = "font-size:11px;padding:1px 3px";
+  leaveAppliedIn.title = "申请日期：台账按它排序，并把抵扣池截断到这一天";
+  const leaveAppliedLabel = document.createElement("span");
+  leaveAppliedLabel.textContent = "申请";
+  leaveAppliedLabel.style.cssText = "font-size:11px;color:#5a6478";
   const leaveDateIn = document.createElement("input");
   leaveDateIn.type = "date";
   leaveDateIn.style.cssText = "font-size:11px;padding:1px 3px";
+  const leaveDateLabel = document.createElement("span");
+  leaveDateLabel.textContent = "请假";
+  leaveDateLabel.style.cssText = "font-size:11px;color:#5a6478";
   const leaveStartIn = document.createElement("input");
   leaveStartIn.type = "time";
   leaveStartIn.style.cssText = "font-size:11px;padding:1px 3px";
@@ -412,6 +423,7 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   leaveAddBtn.className = "btn";
   leaveAddBtn.onclick = () => {
     const res = actions.onAddLeave({
+      appliedDate: leaveAppliedIn.value,
       date: leaveDateIn.value,
       start: leaveStartIn.value,
       end: leaveEndIn.value,
@@ -426,7 +438,16 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   };
   const leaveForm = document.createElement("div");
   leaveForm.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 6px";
-  leaveForm.append(leaveDateIn, leaveStartIn, leaveEndIn, leaveReasonIn, leaveAddBtn);
+  leaveForm.append(
+    leaveAppliedLabel,
+    leaveAppliedIn,
+    leaveDateLabel,
+    leaveDateIn,
+    leaveStartIn,
+    leaveEndIn,
+    leaveReasonIn,
+    leaveAddBtn,
+  );
 
   const leaveList = document.createElement("div");
 
@@ -487,8 +508,9 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
       const info = document.createElement("div");
       info.style.cssText =
         "flex:1;min-width:0;font-size:11px;color:#3a4356;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      const applied = bd.leave.appliedDate ? `申请 ${bd.leave.appliedDate}` : "申请 ——";
       info.textContent =
-        `${bd.leave.date} ${bd.leave.start}-${bd.leave.end}  ${fmtDuration(bd.minutes)}  ${bd.leave.reason}`;
+        `${applied}  请假 ${bd.leave.date} ${bd.leave.start}-${bd.leave.end}  ${fmtDuration(bd.minutes)}  ${bd.leave.reason}`;
       const declBtn = document.createElement("button");
       declBtn.type = "button";
       declBtn.textContent = "声明";
@@ -505,7 +527,24 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
       delBtn.className = "btn";
       delBtn.style.margin = "0";
       delBtn.onclick = () => actions.onDeleteLeave(bd.leave.id);
-      row.append(info, declBtn, delBtn);
+      row.append(info);
+      if (!bd.leave.appliedDate) {
+        const fix = document.createElement("input");
+        fix.type = "date";
+        fix.title = "补填申请日期，补上后这笔请假才按申请日期参与抵扣";
+        fix.style.cssText = "font-size:11px;padding:1px 3px";
+        fix.onchange = () => {
+          const res = actions.onSetLeaveAppliedDate(bd.leave.id, fix.value);
+          if (!res.ok) {
+            showStatus("补填失败: " + res.error, "err");
+            fix.value = "";
+            return;
+          }
+          showStatus("已补填申请日期 ✓", "ok");
+        };
+        row.appendChild(fix);
+      }
+      row.append(declBtn, delBtn);
       leaveList.appendChild(row);
     }
   };
