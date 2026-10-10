@@ -11,6 +11,8 @@ const LEAVE_START_KEY = "zc-leave-start";
 const DAY_ADJUST_KEY = "zc-day-adjust";
 const REPORTED_KEY = "zc-month-reported";
 const FORM_KEY = "zc-form-config";
+/** 备份/恢复覆盖的全部 key，顺序即导出文件里的顺序 */
+const BACKUP_KEYS = [RECORDS_KEY, WORK_KEY, LEAVES_KEY, LEAVE_START_KEY, DAY_ADJUST_KEY, REPORTED_KEY, FORM_KEY];
 const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
@@ -299,6 +301,49 @@ const panel = createPanel(work, form, {
     records.clear();
     persist();
     recompute();
+  },
+  onExportBackup() {
+    const values: Record<string, string> = {};
+    for (const key of BACKUP_KEYS) values[key] = GM_getValue(key, "");
+    const payload = {
+      app: "zc-checkings",
+      version: __ZC_VERSION__,
+      exportedAt: new Date().toISOString(),
+      values,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `zc-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  },
+  async onImportBackup(file: File) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      return { ok: false, error: "不是合法的 JSON 文件" };
+    }
+    const values = (payload as { values?: unknown } | null)?.values;
+    if (!values || typeof values !== "object" || Array.isArray(values)) {
+      return { ok: false, error: "不像是本插件的备份文件" };
+    }
+    const table = values as Record<string, unknown>;
+    const incoming: Record<string, string> = {};
+    let found = 0;
+    for (const key of BACKUP_KEYS) {
+      const raw = table[key];
+      if (typeof raw === "string") {
+        incoming[key] = raw;
+        found++;
+      }
+    }
+    if (found === 0) return { ok: false, error: "备份里没有任何已知的数据项" };
+    // 整体覆盖：备份里没有的 key 也一并清空，恢复结果与备份时完全一致
+    for (const key of BACKUP_KEYS) GM_setValue(key, incoming[key] ?? "");
+    location.reload();
+    return { ok: true };
   },
 });
 

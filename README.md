@@ -76,6 +76,31 @@ Tampermonkey 用户脚本：从公司考勤系统读取打卡记录（跨月份�
 - 文件名默认按月份生成（`yyyy年m月加班申请单`，填了申请人则追加 `-申请人`）；切换月份或改申请人时重新生成，也可手填覆盖
 - 模板在 `src/assets/overtime-form.xlsx`，只保留表单结构（示例里的个人信息已清空成占位符），构建时内联进脚本
 
+## 备份与恢复
+
+「设置」区的「导出备份」/「导入备份」，把全部数据与配置整包导成一个 JSON 文件，或从该文件整体恢复。文件名 `zc-backup-YYYY-MM-DD.json`，内容形如：
+
+```json
+{
+  "app": "zc-checkings",
+  "version": "0.16.0",
+  "exportedAt": "2026-09-21T05:00:00.000Z",
+  "values": {
+    "zc-attendance-records": "…",
+    "zc-attendance-work": "…",
+    "zc-leave-records": "…",
+    "zc-leave-start": "…",
+    "zc-day-adjust": "…",
+    "zc-month-reported": "…",
+    "zc-form-config": "…"
+  }
+}
+```
+
+- `values` 里是这七个 key 在存储里的**原样字符串**，导入时原样写回 —— 逐字节一致的备份。`zc-leave-start` 存的是裸日期字符串（不是 JSON），其余是 JSON 文本
+- 导入是**整体覆盖**：七个 key 都按备份写一遍（备份里没有的写空），然后刷新页面让面板与设置重新加载
+- 导入前会弹一次确认，因为会盖掉当前的全部数据
+
 ## 构建
 
 依赖用 pnpm 管理，先 `pnpm install`：

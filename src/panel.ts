@@ -11,6 +11,8 @@ export interface PanelActions {
   onApiFetchMonth(month: string): void;
   onApiBackfill(fromMonth: string): void;
   onExport(records: AttendanceRecord[], monthKey?: string | null): void;
+  onExportBackup(): void;
+  onImportBackup(file: File): Promise<{ ok: boolean; error?: string }>;
   onSaveForm(form: FormConfig): { ok: boolean; error?: string };
   onExportForm(monthKey: string | null, form: FormConfig): void;
   onAddLeave(input: Omit<LeaveEntry, "id">): { ok: boolean; error?: string };
@@ -215,6 +217,38 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   clearBtn.onclick = () => actions.onClear();
   btnRow.append(saveBtn, clearBtn);
   configBox.appendChild(btnRow);
+
+  const backupRow = document.createElement("div");
+  const backupExportBtn = document.createElement("button");
+  backupExportBtn.type = "button";
+  backupExportBtn.textContent = "导出备份";
+  backupExportBtn.title = "把全部数据与配置导出成一个 JSON 文件";
+  backupExportBtn.className = "btn";
+  backupExportBtn.onclick = () => actions.onExportBackup();
+  const backupImportBtn = document.createElement("button");
+  backupImportBtn.type = "button";
+  backupImportBtn.textContent = "导入备份";
+  backupImportBtn.title = "从备份文件恢复，会覆盖当前全部数据与配置";
+  backupImportBtn.className = "btn";
+  const backupFileIn = document.createElement("input");
+  backupFileIn.type = "file";
+  backupFileIn.accept = ".json,application/json";
+  backupFileIn.style.display = "none";
+  backupImportBtn.onclick = () => backupFileIn.click();
+  backupFileIn.onchange = async () => {
+    const file = backupFileIn.files?.[0];
+    backupFileIn.value = "";
+    if (!file) return;
+    if (!confirm("导入会覆盖当前的全部数据与配置，确定继续？")) return;
+    const res = await actions.onImportBackup(file);
+    if (!res.ok) {
+      showStatus("导入失败: " + res.error, "err");
+      return;
+    }
+    showStatus("已导入，正在刷新…", "ok");
+  };
+  backupRow.append(backupExportBtn, backupImportBtn, backupFileIn);
+  configBox.appendChild(backupRow);
 
   const formBox = document.createElement("div");
   formBox.style.cssText =
