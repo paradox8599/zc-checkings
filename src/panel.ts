@@ -176,13 +176,20 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   const form = document.createElement("div");
   form.style.cssText = "display:flex;flex-direction:column;gap:4px;margin:6px 0";
 
-  const mkRow = (label: string, ctrl: HTMLInputElement | HTMLSelectElement) => {
+  const mkRow = (label: string, ctrl: HTMLElement) => {
     const row = document.createElement("label");
     row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px";
     const span = document.createElement("span");
     span.textContent = label;
     row.append(span, ctrl);
     return row;
+  };
+
+  const wrapPair = (...els: HTMLElement[]) => {
+    const box = document.createElement("div");
+    box.style.cssText = "display:flex;align-items:center;gap:4px";
+    box.append(...els);
+    return box;
   };
 
   const lunchIn = document.createElement("input");
@@ -192,7 +199,20 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   lunchIn.value = String(work.lunchBreakMinutes);
   lunchIn.style.width = "70px";
 
+  const lunchStartIn = document.createElement("input");
+  lunchStartIn.type = "time";
+  lunchStartIn.value = work.lunchStart;
+  lunchStartIn.style.width = "70px";
+  lunchStartIn.title = "午休开始时间，请假时长会扣除与该窗口重叠的部分";
+
+  const lunchEndIn = document.createElement("input");
+  lunchEndIn.type = "time";
+  lunchEndIn.value = work.lunchEnd;
+  lunchEndIn.style.width = "70px";
+  lunchEndIn.title = "午休结束时间，请假时长会扣除与该窗口重叠的部分";
+
   form.append(mkRow("午休(分钟)", lunchIn));
+  form.append(mkRow("午休起/止", wrapPair(lunchStartIn, lunchEndIn)));
   configBox.appendChild(form);
 
   const btnRow = document.createElement("div");
@@ -202,6 +222,8 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   saveBtn.onclick = () => {
     const next: WorkConfig = {
       lunchBreakMinutes: Number(lunchIn.value),
+      lunchStart: lunchStartIn.value,
+      lunchEnd: lunchEndIn.value,
     };
     const res = actions.onSaveWork(next);
     if (!res.ok) {

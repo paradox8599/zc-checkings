@@ -1,4 +1,4 @@
-import { timeToMinutes } from "./calc";
+import { overlapMinutes, timeToMinutes, WORKDAY_HOURS, type WorkConfig } from "./calc";
 
 export interface LeaveEntry {
   id: string;
@@ -55,11 +55,13 @@ export interface Ledger {
   balance: number;
 }
 
-export function leaveMinutes(leave: LeaveEntry): number {
-  return Math.max(timeToMinutes(leave.end) - timeToMinutes(leave.start), 0);
+/** 单条请假的时长：扣除与午休窗口重叠的部分 */
+export function leaveMinutes(leave: LeaveEntry, work: WorkConfig): number {
+  const raw = timeToMinutes(leave.end) - timeToMinutes(leave.start);
+  return Math.max(raw - overlapMinutes(leave.start, leave.end, work.lunchStart, work.lunchEnd), 0);
 }
 
-export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], startDate = ""): Ledger {
+export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], work: WorkConfig, startDate = ""): Ledger {
   const inRange = (d: OvertimeDay) => !startDate || d.date >= startDate;
 
   const items = overtimeDays
@@ -108,12 +110,22 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
   const ordered = [...leaves].sort((a, b) => a.appliedDate.localeCompare(b.appliedDate));
   const totalOvertime = items.reduce((sum, d) => sum + d.minutes, 0);
 
+  // 请假时长按请假日期 clamp：同一天合计不超过一天工时（8h），超出部分不计
+  const perDayCap = new Map<string, number>();
+  const cappedMinutes = (leave: LeaveEntry): number => {
+    const used = perDayCap.get(leave.date) ?? 0;
+    const raw = leaveMinutes(leave, work);
+    const take = Math.max(Math.min(raw, WORKDAY_HOURS * 60 - used), 0);
+    perDayCap.set(leave.date, used + take);
+    return take;
+  };
+
   let cursor = 0;
   let takenByLeaves = 0;
   const breakdowns: LeaveBreakdown[] = [];
 
   for (const leave of ordered) {
-    const minutes = leaveMinutes(leave);
+    const minutes = cappedMinutes(leave);
     const capMonth = leave.appliedDate.slice(0, 7);
     const balanceBefore = poolAt(capMonth) - takenByLeaves;
     const parts: LeavePart[] = [];
@@ -148,8 +160,8 @@ export function buildLedger(overtimeDays: OvertimeDay[], leaves: LeaveEntry[], s
     unreportedMinutes: overtimeDays
       .filter((d) => d.reported === false && inRange(d))
       .reduce((sum, d) => sum + d.minutes, 0),
-    totalLeave: ordered.reduce((sum, l) => sum + leaveMinutes(l), 0),
-    balance: totalOvertime - ordered.reduce((sum, l) => sum + leaveMinutes(l), 0),
+    totalLeave: takenByLeaves,
+    balance: totalOvertime - takenByLeaves,
   };
 }
 

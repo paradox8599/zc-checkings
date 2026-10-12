@@ -1,5 +1,20 @@
 export interface WorkConfig {
   lunchBreakMinutes: number;
+  /** 午休窗口起止（用于请假时长扣除，如 12:00/13:00） */
+  lunchStart: string;
+  lunchEnd: string;
+}
+
+export function isValidWorkConfig(work: WorkConfig): boolean {
+  const reHHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+  return (
+    typeof work === "object" && work !== null &&
+    Number.isFinite(work.lunchBreakMinutes) &&
+    work.lunchBreakMinutes >= 0 &&
+    typeof work.lunchStart === "string" && reHHMM.test(work.lunchStart) &&
+    typeof work.lunchEnd === "string" && reHHMM.test(work.lunchEnd) &&
+    timeToMinutes(work.lunchEnd) > timeToMinutes(work.lunchStart)
+  );
 }
 
 export const WORKDAY_HOURS = 8;
@@ -10,6 +25,13 @@ const MIN_OVERTIME_MINUTES = 60;
 export function timeToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
+}
+
+/** 两个时间段 [aStart,aEnd) 与 [bStart,bEnd) 的重叠分钟数 */
+export function overlapMinutes(aStart: string, aEnd: string, bStart: string, bEnd: string): number {
+  const s = Math.max(timeToMinutes(aStart), timeToMinutes(bStart));
+  const e = Math.min(timeToMinutes(aEnd), timeToMinutes(bEnd));
+  return Math.max(e - s, 0);
 }
 
 export function fmtDuration(min: number): string {

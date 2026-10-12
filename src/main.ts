@@ -1,5 +1,5 @@
 import { fetchMonthAttendances, type AttendanceRecord } from "./api";
-import { summarize, summarizeByMonth, withDayAdjustments, type WorkConfig } from "./calc";
+import { isValidWorkConfig, summarize, summarizeByMonth, withDayAdjustments, type WorkConfig } from "./calc";
 import { autoFileName, buildFormXlsx, DEFAULT_FORM, renderOvertimeText, type FormConfig } from "./form";
 import { buildLedger, type LeaveEntry, type OvertimeDay } from "./ledger";
 import { createPanel } from "./panel";
@@ -17,6 +17,8 @@ const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
   lunchBreakMinutes: 60,
+  lunchStart: "12:00",
+  lunchEnd: "13:00",
 };
 
 function loadWork(): WorkConfig {
@@ -164,8 +166,8 @@ let fetchingMonth = "";
 const panel = createPanel(work, form, {
   onSaveWork(next: WorkConfig) {
     try {
-      if (typeof next !== "object" || next === null || !Number.isFinite(next.lunchBreakMinutes)) {
-        throw new Error("配置格式不合法");
+      if (!isValidWorkConfig(next)) {
+        throw new Error("午休分钟数须非负，起止须为合法 HH:MM，且结束晚于开始");
       }
       work = { ...DEFAULT_WORK, ...next };
       GM_setValue(WORK_KEY, JSON.stringify(work));
@@ -382,7 +384,7 @@ function recompute(): void {
     reported: reported.has(d.date.slice(0, 7)),
   }));
 
-  const ledger = buildLedger(overtimeDays, leaves, leaveStart);
+  const ledger = buildLedger(overtimeDays, leaves, work, leaveStart);
   const busy = apiFetching || backfilling
     ? ({ mode: apiFetching ? "fetch" : "backfill", month: fetchingMonth } as const)
     : null;
