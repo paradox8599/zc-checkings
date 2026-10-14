@@ -17,7 +17,7 @@ const { buildLedger, computeDay, isValidWorkConfig, leaveMinutes, renderDeclarat
   `data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString("base64")}`
 );
 
-const work = { lunchBreakMinutes: 60, lunchStart: "12:00", lunchEnd: "13:00" };
+const work = { lunchStart: "12:00", lunchEnd: "13:00" };
 const overtime = [{ date: "2026-09-01", minutes: 1200, reported: true }];
 const leave = (id, start, end, date = "2026-10-12", appliedDate = "2026-10-01") => ({
   id, start, end, date, appliedDate, reason: "测试",
@@ -97,12 +97,32 @@ test("未上报月份和申请当月仍不参与抵扣", () => {
   assert.equal(ledger.breakdowns[0].balanceAfter, -120);
 });
 
-test("请假午休窗口不改变既有考勤扣午休分钟数的规则", () => {
+test("考勤未跨午休不扣减，08:44–11:46 为3小时2分", () => {
+  for (const [date, overtimeMinutes] of [["2026-10-11", 182], ["2026-10-12", 0]]) {
+    const stat = computeDay({ date, clockIn: "08:44", clockOut: "11:46" }, work);
+    assert.equal(stat.workedMinutes, 182);
+    assert.equal(stat.overtimeMinutes, overtimeMinutes);
+  }
+});
+
+test("考勤部分跨午休只扣重叠的30分钟", () => {
+  const stat = computeDay({ date: "2026-10-11", clockIn: "11:30", clockOut: "12:30" }, work);
+  assert.equal(stat.workedMinutes, 30);
+  assert.equal(stat.overtimeMinutes, 0);
+});
+
+test("考勤完整跨默认午休仍扣1小时", () => {
+  const stat = computeDay({ date: "2026-10-12", clockIn: "09:00", clockOut: "18:00" }, work);
+  assert.equal(stat.workedMinutes, 480);
+  assert.equal(stat.overtimeMinutes, 0);
+});
+
+test("考勤按自定义午休窗口扣除", () => {
   const stat = computeDay({ date: "2026-10-12", clockIn: "09:00", clockOut: "19:00" }, {
     ...work, lunchStart: "12:00", lunchEnd: "14:00",
   });
-  assert.equal(stat.workedMinutes, 540);
-  assert.equal(stat.overtimeMinutes, 60);
+  assert.equal(stat.workedMinutes, 480);
+  assert.equal(stat.overtimeMinutes, 0);
 });
 
 test("正常及跨小时边界的午休配置可保存", () => {
@@ -121,8 +141,6 @@ const invalidConfigs = [
   ["空结束时间", { lunchEnd: "" }],
   ["格式不完整", { lunchStart: "9:00" }],
   ["时间字段不是字符串", { lunchStart: 1200 }],
-  ["午休分钟数非有限数", { lunchBreakMinutes: NaN }],
-  ["午休分钟数为负", { lunchBreakMinutes: -1 }],
 ];
 
 for (const [name, fields] of invalidConfigs) {

@@ -16,7 +16,6 @@ const BACKUP_KEYS = [RECORDS_KEY, WORK_KEY, LEAVES_KEY, LEAVE_START_KEY, DAY_ADJ
 const DEFAULT_LEAVE_START = "2026-08-01";
 
 const DEFAULT_WORK: WorkConfig = {
-  lunchBreakMinutes: 60,
   lunchStart: "12:00",
   lunchEnd: "13:00",
 };
@@ -167,7 +166,7 @@ const panel = createPanel(work, form, {
   onSaveWork(next: WorkConfig) {
     try {
       if (!isValidWorkConfig(next)) {
-        throw new Error("午休分钟数须非负，起止须为合法 HH:MM，且结束晚于开始");
+        throw new Error("午休起止须为合法 HH:MM，且结束晚于开始");
       }
       work = { ...DEFAULT_WORK, ...next };
       GM_setValue(WORK_KEY, JSON.stringify(work));

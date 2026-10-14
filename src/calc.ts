@@ -1,6 +1,5 @@
 export interface WorkConfig {
-  lunchBreakMinutes: number;
-  /** 午休窗口起止（用于请假时长扣除，如 12:00/13:00） */
+  /** 午休窗口起止（用于考勤工时和请假时长扣除，如 12:00/13:00） */
   lunchStart: string;
   lunchEnd: string;
 }
@@ -9,8 +8,6 @@ export function isValidWorkConfig(work: WorkConfig): boolean {
   const reHHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
   return (
     typeof work === "object" && work !== null &&
-    Number.isFinite(work.lunchBreakMinutes) &&
-    work.lunchBreakMinutes >= 0 &&
     typeof work.lunchStart === "string" && reHHMM.test(work.lunchStart) &&
     typeof work.lunchEnd === "string" && reHHMM.test(work.lunchEnd) &&
     timeToMinutes(work.lunchEnd) > timeToMinutes(work.lunchStart)
@@ -77,7 +74,8 @@ export function computeDay(
   let workedMinutes = 0;
   if (rec.clockIn && rec.clockOut) {
     const span = Math.max(timeToMinutes(rec.clockOut) - timeToMinutes(rec.clockIn), 0);
-    workedMinutes = Math.max(span - work.lunchBreakMinutes, 0);
+    const lunchMinutes = overlapMinutes(rec.clockIn, rec.clockOut, work.lunchStart, work.lunchEnd);
+    workedMinutes = Math.max(span - lunchMinutes, 0);
   }
 
   let overtimeMinutes = 0;
