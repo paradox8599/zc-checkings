@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import readline from "node:readline/promises";
@@ -35,11 +36,21 @@ function prepareTampermonkey() {
   console.log("Tampermonkey 就绪:", TM_DIR);
 }
 
+const children = [];
+
+/** 返回占用指定端口的进程 PID，没有则返回空字符串 */
+function portPid(port) {
+  const r = spawnSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" });
+  return (r.stdout || "").trim().split("\n")[0] || "";
+}
+
 function spawnService(cmd, args, name) {
   const p = spawn(cmd, args, { cwd: ROOT, stdio: "inherit" });
+  children.push(p);
   p.on("exit", (code) => {
     if (code !== null && code !== 0) {
       console.error(`[${name}] 异常退出 code=${code},dev 结束`);
+      cleanup();
       process.exit(1);
     }
   });
@@ -100,15 +111,34 @@ async function navigate(url) {
 }
 
 let chromeProc = null;
-process.on("SIGINT", () => {
-  console.log("\n收尾...");
+
+function cleanup() {
+  for (const c of children) {
+    try {
+      c.kill("SIGTERM");
+    } catch {}
+  }
   if (chromeProc) {
     try {
       process.kill(chromeProc.pid, "SIGTERM");
     } catch {}
   }
-  process.exit(0);
-});
+}
+
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => {
+    console.log("\n收尾...");
+    cleanup();
+    process.exit(0);
+  });
+}
+
+/** stub 文件头部（含 @updateURL/@downloadURL）的哈希，头部变化时触发重装 */
+function stubHash() {
+  const src = readFileSync(join(ROOT, "dist", "attendance.user.js"), "utf8");
+  const header = src.slice(0, src.indexOf("// ==/UserScript=="));
+  return createHash("sha256").update(header).digest("hex").slice(0, 16);
+}
 
 function launchChrome() {
   chromeProc = spawn(CHROME, [
@@ -126,6 +156,12 @@ async function main() {
   prepareTampermonkey();
   mkdirSync(PROFILE_DIR, { recursive: true });
 
+  const busy = portPid(8877);
+  if (busy) {
+    console.error(`端口 8877 已被进程 ${busy} 占用（多为上次 dev 未退出的残留），先执行: kill ${busy}`);
+    process.exit(1);
+  }
+
   spawnSync("node", ["build.mjs"], { cwd: ROOT, stdio: "inherit" });
   spawnService("node", ["build.mjs", "--watch"], "build-watch");
   spawnService("node", ["test/serve-dist.mjs"], "serve-dist");
@@ -141,14 +177,14 @@ async function main() {
   }
   await loadTampermonkey();
 
-  if (!existsSync(FLAG)) {
+  if (!existsSync(FLAG) || readFileSync(FLAG, "utf8").trim() !== stubHash()) {
     await navigate(SCRIPT_URL);
     const rl = readline.createInterface({ input: stdin, output: stdout });
-    console.log("首次安装:浏览器已打开脚本地址,Tampermonkey 会弹出安装确认");
+    console.log("首次安装或脚本头部有更新:浏览器已打开脚本地址,Tampermonkey 会弹出安装确认");
     console.log("点击「安装」,然后回到这里按回车...");
     await rl.question("");
     rl.close();
-    writeFileSync(FLAG, Date.now().toString());
+    writeFileSync(FLAG, stubHash());
     await navigate(SITE_URL);
     console.log("已记录安装,下次启动直接打开考勤系统");
   } else {

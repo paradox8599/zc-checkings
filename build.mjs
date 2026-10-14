@@ -37,22 +37,28 @@ const meta = `// @name         考勤加班统计
 // @version      ${version}
 // @description  读取考勤API查询打卡数据，统计加班时长
 // @match        http://61.174.171.59:9895/*
-// @updateURL    ${repoUrl}/releases/latest/download/attendance.release.user.js
-// @downloadURL  ${repoUrl}/releases/latest/download/attendance.release.user.js
 // @run-at       document-idle
+`;
+
+// release 跟随 GitHub 更新；dev 由本地 core.js 热加载，禁用自动更新，避免被发布版覆盖
+const updateMeta = isRelease
+  ? `// @updateURL    ${repoUrl}/releases/latest/download/attendance.release.user.js
+// @downloadURL  ${repoUrl}/releases/latest/download/attendance.release.user.js
+`
+  : `// @downloadURL  none
 `;
 
 if (isRelease) {
   const core = readFileSync("dist/core.js", "utf8");
   const release = `// ==UserScript==
-${meta}// ==/UserScript==
+${meta}${updateMeta}// ==/UserScript==
 
 ${core}`;
   writeFileSync("dist/attendance.release.user.js", release);
   console.log(`built dist/attendance.release.user.js (${(release.length / 1024) | 0}KB, 可直接安装到 Tampermonkey)`);
 } else {
   const stub = `// ==UserScript==
-${meta}// ==/UserScript==
+${meta}${updateMeta}// ==/UserScript==
 
 (function () {
   fetch("http://localhost:8877/core.js?t=" + Date.now())

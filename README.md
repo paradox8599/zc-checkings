@@ -127,6 +127,10 @@ pnpm run dev
 
 首次启动会下载 Tampermonkey 并安装脚本（耗时几秒）；之后复用 profile，秒开。后续改动只需刷新考勤系统页面即生效，无需在 Tampermonkey 里点更新。
 
+dev 版脚本带 `@downloadURL none`，禁用自动更新，不会被 GitHub 上的发布版覆盖；只有 `pnpm run release` 产出的发布版才跟随 GitHub 更新。
+
+`.dev/installed.flag` 存的是当前 stub 头部的哈希：头部有变化（如更新地址调整）时，下次 `pnpm run dev` 会重新打开安装页提示「重新安装」，装完即更新记录；头部没变则直接打开考勤页。
+
 Chrome 带 `--remote-debugging-port=9222`，AI 调试时用 `agent-browser --cdp 9222 <命令>` 连接（快照、点击、读控制台等）。
 
 原理：`dist/attendance.user.js` 是零 `@grant` 的 stub（`@match` 真实考勤系统域名），`document-idle` 时 fetch `http://localhost:8877/core.js?t=<时间戳>`（时间戳绕过缓存）并直接 `eval`。build 时 esbuild 用 `define` 把 `GM_setValue`/`GM_getValue` 替换为 localStorage 读写函数（见 `build.mjs` 的 `banner`）。
