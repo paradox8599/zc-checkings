@@ -105,9 +105,12 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
     `#zc-attendance-panel .tb-meta{flex:0 0 100px;display:flex;justify-content:flex-end;align-items:center;gap:5px;font-size:10px;color:#5a6478;padding-right:2px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
     `#zc-attendance-panel .tb-meta .w{flex:0 0 44px;text-align:right;color:#2e6bd8}`,
     `#zc-attendance-panel .tb-meta .ov{flex:0 0 50px;text-align:right;color:#c07b1c}`,
-    `#zc-attendance-panel .tb-head .tb-adjust{flex:0 0 52px;padding-left:4px;font-size:9px;color:#9aa3b2;text-align:right}`,
-    `#zc-attendance-panel .tb-adjust{flex:0 0 52px;display:flex;justify-content:flex-end;align-items:center;padding-left:4px}`,
-    `#zc-attendance-panel .tb-adjust input{width:46px;box-sizing:border-box;font-size:10px;padding:0 3px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-head .tb-adjust{font-size:9px;color:#9aa3b2;text-align:right}`,
+    `#zc-attendance-panel .tb-adjust{flex:0 0 120px;display:flex;justify-content:flex-end;align-items:center;gap:3px;padding-left:4px;font-size:10px;color:#5a6478}`,
+    `#zc-attendance-panel .tb-adjust input{width:30px;box-sizing:border-box;font-size:10px;padding:0 3px;text-align:right;appearance:textfield;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}`,
+    `#zc-attendance-panel .tb-adjust input::-webkit-inner-spin-button,#zc-attendance-panel .tb-adjust input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}`,
+    `#zc-attendance-panel .tb-adjust-sign{width:24px;height:18px;padding:0;border:1px solid #93b8f5;border-radius:3px;background:#eff6ff;color:#2563eb;font-size:14px;font-weight:700;line-height:1;cursor:pointer}`,
+    `#zc-attendance-panel .tb-adjust-sign.negative{border-color:#ee9a9a;background:#fff1f1;color:#c53030}`,
     `#zc-attendance-panel .tb-adjust input.dirty{border-color:#e8890c;color:#c07b1c}`,
     `#zc-attendance-panel .tb-row.weekend .tb-label{color:#6d4fc1}`,
     `#zc-attendance-panel .tb-row.weekend .tb-bar{background:#8f74d8}`,
@@ -192,26 +195,18 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
     return box;
   };
 
-  const lunchIn = document.createElement("input");
-  lunchIn.type = "number";
-  lunchIn.min = "0";
-  lunchIn.step = "5";
-  lunchIn.value = String(work.lunchBreakMinutes);
-  lunchIn.style.width = "70px";
-
   const lunchStartIn = document.createElement("input");
   lunchStartIn.type = "time";
   lunchStartIn.value = work.lunchStart;
   lunchStartIn.style.width = "70px";
-  lunchStartIn.title = "午休开始时间，请假时长会扣除与该窗口重叠的部分";
+  lunchStartIn.title = "午休开始时间，考勤工时和请假时长会扣除与该窗口重叠的部分";
 
   const lunchEndIn = document.createElement("input");
   lunchEndIn.type = "time";
   lunchEndIn.value = work.lunchEnd;
   lunchEndIn.style.width = "70px";
-  lunchEndIn.title = "午休结束时间，请假时长会扣除与该窗口重叠的部分";
+  lunchEndIn.title = "午休结束时间，考勤工时和请假时长会扣除与该窗口重叠的部分";
 
-  form.append(mkRow("午休(分钟)", lunchIn));
   form.append(mkRow("午休起/止", wrapPair(lunchStartIn, lunchEndIn)));
   configBox.appendChild(form);
 
@@ -221,7 +216,6 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
   saveBtn.className = "btn";
   saveBtn.onclick = () => {
     const next: WorkConfig = {
-      lunchBreakMinutes: Number(lunchIn.value),
       lunchStart: lunchStartIn.value,
       lunchEnd: lunchEndIn.value,
     };
@@ -740,7 +734,7 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
     head.appendChild(document.createElement("div")).className = "tb-meta";
     const headAdjust = document.createElement("div");
     headAdjust.className = "tb-adjust";
-    headAdjust.textContent = "修正";
+    headAdjust.textContent = "修正（时 / 分）";
     head.appendChild(headAdjust);
     box.appendChild(head);
 
@@ -806,26 +800,81 @@ export function createPanel(work: WorkConfig, formConfig: FormConfig, actions: P
       }
       const adjustCell = document.createElement("div");
       adjustCell.className = "tb-adjust";
-      const adjustIn = document.createElement("input");
-      adjustIn.type = "number";
-      adjustIn.step = "1";
-      const current = dayAdjust[d.date] ?? 0;
-      adjustIn.value = current === 0 ? "" : String(current);
-      adjustIn.placeholder = "0";
-      if (current !== 0) adjustIn.classList.add("dirty");
-      adjustIn.title = "当天加班的手工修正，单位分钟，可为负；留空或填 0 表示不修正";
-      adjustIn.onchange = () => {
-        const raw = adjustIn.value.trim();
-        const minutes = raw === "" ? 0 : Number(raw);
+      let current = dayAdjust[d.date] ?? 0;
+      let negative = current < 0;
+      const signBtn = document.createElement("button");
+      signBtn.type = "button";
+      signBtn.className = "tb-adjust-sign";
+      const hoursIn = document.createElement("input");
+      hoursIn.type = "number";
+      hoursIn.min = "0";
+      hoursIn.step = "1";
+      hoursIn.placeholder = "0";
+      hoursIn.setAttribute("aria-label", `${d.date} 修正小时`);
+      hoursIn.title = "修正小时数，非负整数；用左侧 +/− 切换增减";
+      const minutesIn = document.createElement("input");
+      minutesIn.type = "number";
+      minutesIn.min = "0";
+      minutesIn.max = "59";
+      minutesIn.step = "1";
+      minutesIn.placeholder = "0";
+      minutesIn.setAttribute("aria-label", `${d.date} 修正分钟`);
+      minutesIn.title = "修正分钟数，0–59 的整数；两格留空或填 0 表示不修正";
+      const hoursLabel = document.createElement("span");
+      hoursLabel.textContent = "时";
+      const minutesLabel = document.createElement("span");
+      minutesLabel.textContent = "分";
+      const updateSign = () => {
+        signBtn.textContent = negative ? "−" : "+";
+        signBtn.classList.toggle("negative", negative);
+        signBtn.title = negative ? "减少加班时长（点击切换为增加）" : "增加加班时长（点击切换为减少）";
+        signBtn.setAttribute("aria-label", `${d.date} ${signBtn.title}`);
+      };
+      const resetInputs = () => {
+        const magnitude = Math.abs(current);
+        const hours = Math.floor(magnitude / 60);
+        const minutes = magnitude % 60;
+        hoursIn.value = hours === 0 ? "" : String(hours);
+        minutesIn.value = minutes === 0 ? "" : String(minutes);
+        hoursIn.classList.toggle("dirty", current !== 0);
+        minutesIn.classList.toggle("dirty", current !== 0);
+        negative = current < 0;
+        updateSign();
+      };
+      resetInputs();
+      signBtn.onclick = () => {
+        negative = !negative;
+        updateSign();
+      };
+      const saveAdjust = () => {
+        const hours = hoursIn.value === "" ? 0 : hoursIn.valueAsNumber;
+        const remainder = minutesIn.value === "" ? 0 : minutesIn.valueAsNumber;
+        const minutes = (negative ? -1 : 1) * (hours * 60 + remainder);
+        if (!hoursIn.validity.valid || !minutesIn.validity.valid || !Number.isSafeInteger(minutes)) {
+          showStatus("修正保存失败: 小时须为非负整数，分钟须为 0–59 的整数", "err");
+          resetInputs();
+          return;
+        }
+        if (minutes === current) return;
         const res = actions.onSaveDayAdjust(d.date, minutes);
         if (res.ok) {
+          current = minutes;
           showStatus("已保存 ✓", "ok");
         } else {
           showStatus("修正保存失败: " + res.error, "err");
-          adjustIn.value = current === 0 ? "" : String(current);
         }
+        resetInputs();
       };
-      adjustCell.appendChild(adjustIn);
+      adjustCell.addEventListener("focusout", (event) => {
+        if (event.relatedTarget instanceof Node && adjustCell.contains(event.relatedTarget)) return;
+        saveAdjust();
+      });
+      adjustCell.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.target === signBtn) return;
+        event.preventDefault();
+        saveAdjust();
+      });
+      adjustCell.append(signBtn, hoursIn, hoursLabel, minutesIn, minutesLabel);
       row.append(label, clockIn, track, clockOut, meta, adjustCell);
       box.appendChild(row);
     }
